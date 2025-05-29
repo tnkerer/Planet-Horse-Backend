@@ -1,15 +1,97 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model User {
+  id            String    @id @default(uuid())
+  wallet        String    @unique
+  name          String?
+  horses        Horse[]
+  items         Item[]
+  transactions  Transaction[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime? @updatedAt
+  phorse        Float
+}
+
+model Nonce {
+  id        Int      @id @default(autoincrement())
+  address   String
+  nonce     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Horse {
+  id              String @id @default(uuid())
+  tokenId         String @unique
+  owner           User @relation(fields: [ownerId], references: [id])
+  ownerId         String
+  name            String
+  status          Status
+  exp             Int
+  upgradable      Boolean
+  level		        Int
+  currentPower    Int
+  currentSprint   Int
+  currentSpeed    Int
+  currentEnergy   Int
+  maxEnergy       Int
+  equipments      Item[]
+  lastRace  DateTime
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
+}
+
+model Item {
+  id              String @id @default(uuid())
+  owner           User @relation(fields: [ownerId], references: [id])
+  ownerId         String
+  equipedBy       Horse? @relation(fields: [horseId], references: [id])
+  horseId         String?
+  name            String
+  src             String
+  value           Int
+  description     String
+  breakable       Boolean
+  uses            Int?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
+}
+
+model Transaction {
+  id              String @id @default(uuid())
+  owner           User @relation(fields: [ownerId], references: [id])
+  ownerId         String
+  type            TransactionType
+  status          TransactionStatus
+  value           Float
+  txId            String?
+  createdAt DateTime  @default(now())
+}
+
+enum Status {
+  SLEEP
+  IDLE
+  BRUISED
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAW
+}
+
+enum TransactionStatus {
+  FAILED
+  PENDING
+  COMPLETED
+}
+
