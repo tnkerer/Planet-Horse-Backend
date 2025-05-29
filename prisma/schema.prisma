@@ -17,9 +17,11 @@ model User {
   horses        Horse[]
   items         Item[]
   transactions  Transaction[]
+  chests        Chest[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime? @updatedAt
-  phorse        Float
+  phorse        Float @default(0)
+  medals        Int @default(0)
 }
 
 model Nonce {
@@ -74,8 +76,18 @@ model Transaction {
   type            TransactionType
   status          TransactionStatus
   value           Float
+  note            String?
   txId            String?
   createdAt DateTime  @default(now())
+}
+
+model Chest {
+    id              String @id @default(uuid())
+    owner           User @relation(fields: [ownerId], references: [id])
+    ownerId         String
+    chestType       Int
+    quantity        Int
+    @@unique([ownerId, chestType])
 }
 
 enum Status {
@@ -87,6 +99,7 @@ enum Status {
 enum TransactionType {
   DEPOSIT
   WITHDRAW
+  ITEM
 }
 
 enum TransactionStatus {

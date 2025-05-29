@@ -44,6 +44,7 @@ export class AppModule implements NestModule {
         { path: 'auth/nonce', method: RequestMethod.GET },
         { path: 'auth/verify', method: RequestMethod.POST },
         { path: 'auth/logout', method: RequestMethod.POST },
+        { path: 'user/chests/buy', method: RequestMethod.POST },
       )
       .forRoutes('*')
   }
