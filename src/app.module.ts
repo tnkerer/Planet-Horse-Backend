@@ -8,14 +8,26 @@ import { UserModule } from './user/user.module';
 import { ConfigModule } from '@nestjs/config';
 import * as cookieParser from 'cookie-parser';
 import * as csurf from 'csurf';
+import { HorseModule } from './horse/horse.module';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl:   60_000,  // time-to-live in milliseconds
+          limit: 1000,     // max 100 requests per ttl
+        },
+      ],
+    }),
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     UtilsModule,
     PrismaModule,
     AuthModule,
-    UserModule
+    UserModule,
+    HorseModule
   ],
   controllers: [AppController],
   providers: [AppService],
@@ -45,6 +57,8 @@ export class AppModule implements NestModule {
         { path: 'auth/verify', method: RequestMethod.POST },
         { path: 'auth/logout', method: RequestMethod.POST },
         { path: 'user/chests/buy', method: RequestMethod.POST },
+        { path: 'user/chests/open', method: RequestMethod.POST },
+        { path: 'horses/*', method: RequestMethod.PUT },
       )
       .forRoutes('*')
   }

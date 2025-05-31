@@ -1,11 +1,11 @@
 import { Controller, Get, UseGuards, Request, NotFoundException, Post, Body } from '@nestjs/common';
-import { JwtAuthGuard }       from '../auth/jwt-auth.guard';
-import { UserService }        from './user.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { UserService } from './user.service';
 
 @Controller('user')
 @UseGuards(JwtAuthGuard)
 export class UserController {
-  constructor(private readonly users: UserService) {}
+  constructor(private readonly users: UserService) { }
 
   @Get('balance')
   async balance(@Request() req) {
@@ -15,13 +15,13 @@ export class UserController {
     if (phorse === null || phorse === undefined) {
       throw new NotFoundException('User not found');
     }
-    return { phorse , medals };
+    return { phorse, medals };
   }
 
-    /**
-   * POST /user/chests/buy
-   * Body: { chestType: number; chestQuantity: number }
-   */
+  /**
+  * POST /user/chests/buy
+  * Body: { chestType: number; chestQuantity: number }
+  */
   @Post('chests/buy')
   async buyChest(
     @Request() req,
@@ -35,6 +35,24 @@ export class UserController {
     );
   }
 
+  /**
+  * POST /user/chests/open
+  * Body: { chestType: number; chestQuantity: number }
+  * Returns: { drops: string[] }
+  */
+  @Post('chests/open')
+  async openChest(
+    @Request() req,
+    @Body() body: { chestType: number; chestQuantity: number }
+  ) {
+    const drops = await this.users.openChest(
+      req.user.wallet,
+      body.chestType,
+      body.chestQuantity
+    );
+    return { drops };
+  }
+
   @Get('chests')
   async listChests(@Request() req) {
     return this.users.listChests(req.user.wallet);
@@ -44,6 +62,11 @@ export class UserController {
   @Get('transactions')
   async listTransactions(@Request() req) {
     return this.users.listTransactions(req.user.wallet);
+  }
+
+  @Get('items')
+  async listItems(@Request() req) {
+    return this.users.listItems(req.user.wallet);
   }
 
 }

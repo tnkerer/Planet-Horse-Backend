@@ -1,11 +1,11 @@
 export const rarityBase = {
     Common: {
-      "Max lvl": 5,
+      "Max lvl": 10,
       "Growth Min": 1,
       "Growth Max": 1.8,
       "Starting Stats": [1, 3],
       "Origin Breeding": 14,
-      "Breeding Chances": [90, 9, 1, 0, 0, 0]
+      "Breeding Chances": [89, 9, 1, 1, 0, 0]
     },
     Uncommon: {
       "Max lvl": 10,

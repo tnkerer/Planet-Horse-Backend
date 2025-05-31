@@ -1,6 +1,5 @@
 export const globals = {
-    "Main Status Multiplier": 2,
-    "Base Denominator": 24,
+    "Base Denominator": 12,
     "Quarter-Horse Racing Index": 1,
     "Flat Racing Index": 1,
     "Draft Horse Pulling Index": 1,
@@ -27,6 +26,8 @@ export const globals = {
       "45": 3,
       "65": 2,
       "85": 1
-    }
+    },
+    "Energy Spent" : 12,
+    "Experience Multiplier" : 1
   } as const;
   

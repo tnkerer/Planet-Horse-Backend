@@ -70,7 +70,7 @@ Issued At: ${issuedAt}`
 
     return this.jwt.sign(
       { address: addressLine.toLowerCase() },
-      { subject: addressLine.toLowerCase(), expiresIn: '1h' }
+      { subject: addressLine.toLowerCase(), expiresIn: '24h' }
     )
   }
 }
