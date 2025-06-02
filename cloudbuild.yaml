@@ -18,19 +18,13 @@ steps:
     entrypoint: bash
     args:
       - -c
-      - |
-        SITE_DOMAIN=$(gcloud secrets versions access latest --secret=SITE_DOMAIN)
-        SITE_URL=$(gcloud secrets versions access latest --secret=SITE_URL)
-        JWT_SECRET=$(gcloud secrets versions access latest --secret=JWT_SECRET)
-        NODE_ENV=$(gcloud secrets versions access latest --secret=NODE_ENV)
-        SQL_PWD=$(gcloud secrets versions access latest --secret=SQL_PWD)
 
         gcloud run deploy planet-horse-backend \
           --image=us-central1-docker.pkg.dev/planethorse/planet-horse-repo/planet-horse-backend:$SHORT_SHA \
           --region=southamerica-east1 \
           --platform=managed \
           --allow-unauthenticated \
-          --set-env-vars="JWT_SECRET=${JWT_SECRET},SITE_DOMAIN=${SITE_DOMAIN},SITE_URL=${SITE_URL},NODE_ENV=${NODE_ENV},PORT=8080,DATABASE_URL=postgresql://sa_app:${SQL_PWD}@/planethorse?host=/cloudsql/planethorse:southamerica-east1:planet-horse-db" \
+          --set-env-vars="JWT_SECRET=${_JWT_SECRET},SITE_DOMAIN=${_SITE_DOMAIN},SITE_URL=${_SITE_URL},NODE_ENV=${_NODE_ENV},PORT=8080,DATABASE_URL=postgresql://sa_app:${_SQL_PWD}@/planethorse?host=/cloudsql/planethorse:southamerica-east1:planet-horse-db" \
           --add-cloudsql-instances=planethorse:southamerica-east1:planet-horse-db
 
 images:
