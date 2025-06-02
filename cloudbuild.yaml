@@ -2,17 +2,7 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 steps:
-  # Step 1: Install dependencies and run Prisma migrate before building the image
-  - name: node:18
-    entrypoint: bash
-    args:
-      - -c
-      - |
-          export DATABASE_URL="postgresql://sa_app:${_SQL_PWD}@localhost:5432/planethorse"
-          npm ci
-          npx prisma migrate deploy
-
-  # Step 2: Build the Docker image
+  # Step 1: Build the Docker image
   - name: gcr.io/cloud-builders/docker
     args:
       - build
@@ -20,13 +10,13 @@ steps:
       - us-central1-docker.pkg.dev/planethorse/planet-horse-repo/planet-horse-backend:$SHORT_SHA
       - .
 
-  # Step 3: Push the Docker image to Artifact Registry
+  # Step 2: Push the image to Artifact Registry
   - name: gcr.io/cloud-builders/docker
     args:
       - push
       - us-central1-docker.pkg.dev/planethorse/planet-horse-repo/planet-horse-backend:$SHORT_SHA
 
-  # Step 4: Deploy to Cloud Run
+  # Step 3: Deploy to Cloud Run
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     entrypoint: bash
     args:
@@ -38,8 +28,7 @@ steps:
             --platform=managed \
             --allow-unauthenticated \
             --set-env-vars="JWT_SECRET=${_JWT_SECRET},SITE_DOMAIN=${_SITE_DOMAIN},SITE_URL=${_SITE_URL},NODE_ENV=${_NODE_ENV},PORT=8080,DATABASE_URL=postgresql://sa_app:${_SQL_PWD}@/planethorse?host=/cloudsql/planethorse:southamerica-east1:planet-horse-db" \
-            --add-cloudsql-instances=planethorse:southamerica-east1:planet-horse-db \
-            --update-secrets=DATABASE_URL=DATABASE_URL:latest
+            --add-cloudsql-instances=planethorse:southamerica-east1:planet-horse-db
 
 images:
   - us-central1-docker.pkg.dev/planethorse/planet-horse-repo/planet-horse-backend:$SHORT_SHA
