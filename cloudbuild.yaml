@@ -19,14 +19,12 @@ steps:
     args:
       - -c
       - |
-        # Retrieve secrets
         SITE_DOMAIN=$(gcloud secrets versions access latest --secret=SITE_DOMAIN)
         SITE_URL=$(gcloud secrets versions access latest --secret=SITE_URL)
         JWT_SECRET=$(gcloud secrets versions access latest --secret=JWT_SECRET)
         NODE_ENV=$(gcloud secrets versions access latest --secret=NODE_ENV)
         SQL_PWD=$(gcloud secrets versions access latest --secret=SQL_PWD)
 
-        # Deploy to Cloud Run
         gcloud run deploy planet-horse-backend \
           --image=us-central1-docker.pkg.dev/planethorse/planet-horse-repo/planet-horse-backend:$SHORT_SHA \
           --region=southamerica-east1 \
