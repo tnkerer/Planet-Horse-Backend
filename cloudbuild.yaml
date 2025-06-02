@@ -1,53 +1,48 @@
 # cloudbuild.yaml
 
-# Add an options block so Cloud Build knows how to handle logs when
-# a non-default service account is in use. Here we choose CLOUD_LOGGING_ONLY,
-# which means “send logs only to Cloud Logging” and do not write to a bucket.
 options:
+  # When using a custom service account (build.service_account),
+  # Cloud Build requires an explicit logging option. We choose
+  # to send logs only to Cloud Logging (no bucket).
   logging: CLOUD_LOGGING_ONLY
 
 steps:
-  # 1) Build the Docker image and push to Artifact Registry
+  # 1) Build the Docker image and tag it by the short commit SHA
   - name: "gcr.io/cloud-builders/docker"
     args:
-      - "build"
+      - build
       - "-t"
       - "us-central1-docker.pkg.dev/planethorse/planet-horse-repo/planet-horse-backend:$SHORT_SHA"
       - "."
-
   - name: "gcr.io/cloud-builders/docker"
     args:
-      - "push"
+      - push
       - "us-central1-docker.pkg.dev/planethorse/planet-horse-repo/planet-horse-backend:$SHORT_SHA"
 
-  # 2) Deploy to Cloud Run, pulling secrets from Secret Manager at build time
+  # 2) Deploy to Cloud Run, fetching secrets at build time
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
-    entrypoint: "bash"
+    entrypoint: bash
     args:
-      - "-c"
+      - -c
       - |
-        # Fetch each secret into an environment variable
+        # ─── Fetch secrets into local shell variables ────────────────────────────────────
         SITE_DOMAIN=$(gcloud secrets versions access latest --secret=SITE_DOMAIN)
         SITE_URL=$(gcloud secrets versions access latest --secret=SITE_URL)
         JWT_SECRET=$(gcloud secrets versions access latest --secret=JWT_SECRET)
         NODE_ENV=$(gcloud secrets versions access latest --secret=NODE_ENV)
         SQL_PWD=$(gcloud secrets versions access latest --secret=SQL_PWD)
 
-        # Deploy (or update) the Cloud Run service
+        # ─── Deploy (or update) the Cloud Run service ───────────────────────────────────
         gcloud run deploy planet-horse-backend \
           --image="us-central1-docker.pkg.dev/planethorse/planet-horse-repo/planet-horse-backend:$SHORT_SHA" \
           --region="southamerica-east1" \
           --platform="managed" \
           --allow-unauthenticated \
           --set-env-vars="\
-          JWT_SECRET=${JWT_SECRET},\
-          SITE_DOMAIN=${SITE_DOMAIN},\
-          SITE_URL=${SITE_URL},\
-          NODE_ENV=${NODE_ENV},\
           PORT=8080,\
           DATABASE_URL=postgresql://sa_app:${SQL_PWD}@/planethorse?host=/cloudsql/planethorse:southamerica-east1:planet-horse-db" \
           --add-cloudsql-instances="planethorse:southamerica-east1:planet-horse-db"
 
-# 3) Let Cloud Build know which image you built (so it can track it as an artifact)
+# 3) Tell Cloud Build to record this image as an artifact
 images:
   - "us-central1-docker.pkg.dev/planethorse/planet-horse-repo/planet-horse-backend:$SHORT_SHA"
