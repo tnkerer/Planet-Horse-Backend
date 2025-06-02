@@ -38,7 +38,8 @@ steps:
             --platform=managed \
             --allow-unauthenticated \
             --set-env-vars="JWT_SECRET=${_JWT_SECRET},SITE_DOMAIN=${_SITE_DOMAIN},SITE_URL=${_SITE_URL},NODE_ENV=${_NODE_ENV},PORT=8080,DATABASE_URL=postgresql://sa_app:${_SQL_PWD}@/planethorse?host=/cloudsql/planethorse:southamerica-east1:planet-horse-db" \
-            --add-cloudsql-instances=planethorse:southamerica-east1:planet-horse-db
+            --add-cloudsql-instances=planethorse:southamerica-east1:planet-horse-db \
+            --update-secrets=DATABASE_URL=DATABASE_URL:latest
 
 images:
   - us-central1-docker.pkg.dev/planethorse/planet-horse-repo/planet-horse-backend:$SHORT_SHA
