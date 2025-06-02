@@ -40,12 +40,12 @@ steps:
           --platform="managed" \
           --allow-unauthenticated \
           --set-env-vars="\
-JWT_SECRET=${JWT_SECRET},\
-SITE_DOMAIN=${SITE_DOMAIN},\
-SITE_URL=${SITE_URL},\
-NODE_ENV=${NODE_ENV},\
-PORT=8080,\
-DATABASE_URL=postgresql://sa_app:${SQL_PWD}@/planethorse?host=/cloudsql/planethorse:southamerica-east1:planet-horse-db" \
+          JWT_SECRET=${JWT_SECRET},\
+          SITE_DOMAIN=${SITE_DOMAIN},\
+          SITE_URL=${SITE_URL},\
+          NODE_ENV=${NODE_ENV},\
+          PORT=8080,\
+          DATABASE_URL=postgresql://sa_app:${SQL_PWD}@/planethorse?host=/cloudsql/planethorse:southamerica-east1:planet-horse-db" \
           --add-cloudsql-instances="planethorse:southamerica-east1:planet-horse-db"
 
 # 3) Let Cloud Build know which image you built (so it can track it as an artifact)
