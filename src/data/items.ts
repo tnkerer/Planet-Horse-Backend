@@ -4,6 +4,7 @@ export const items = {
         "src": "hay",
         "description": "A bale of hay. Will recover 3 energy instantly.",
         "breakable" : true,
+        "consumable" : true,
         "uses" : 1
     },
     "Common Saddle": {
@@ -11,6 +12,7 @@ export const items = {
         "src": "saddle",
         "description": "A common saddle, it will decrease the chance of a horse getting hurt by 20% during the course of 10 races.",
         "breakable" : true,
+        "consumable" : false,        
         "uses" : 10
     },
     "Superior XP Potion": {
@@ -18,6 +20,7 @@ export const items = {
         "src": "xp",
         "description": "Superior XP Potion, it doubles the XP earned from racing during the course of 15 races.",
         "breakable" : true,
+        "consumable" : false,  
         "uses" : 15
     },
     "Common XP Potion": {
@@ -25,6 +28,7 @@ export const items = {
         "src": "common_xp",
         "description": "Common XP Potion, it grants +50% XP from racing during the course of 5 races.",
         "breakable" : true,
+        "consumable" : false,  
         "uses" : 5
     },
     "Common Horseshoe": {
@@ -32,6 +36,7 @@ export const items = {
         "src": "horseshoe",
         "description": "A horseshoe. Improve the odds of a horse scoring a better position by 10% during the course of 30 races.",
         "breakable" : true,
+        "consumable" : false,  
         "uses" : 30
     },
         "Pumpers": {
@@ -39,6 +44,7 @@ export const items = {
         "src": "bump",
         "description": "A performance enhancing drug that greatly increases your chances of securing a better position, but also raises the risk of injury. Enough for 10 uses.",
         "breakable" : true,
+        "consumable" : false,  
         "uses" : 10
     }
 }

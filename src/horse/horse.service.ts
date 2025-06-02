@@ -489,8 +489,8 @@ export class HorseService {
       }
 
       // 4) Compute cost
-      // cost = level * 50 PHORSE
-      const cost = horse.level * 50;
+      // cost = level * 100 PHORSE
+      const cost = horse.level * globals["Recovery Cost"];
       if (user.phorse < cost) {
         throw new BadRequestException(
           `Not enough PHORSE to restore. Cost = ${cost}, you have ${user.phorse}`,
