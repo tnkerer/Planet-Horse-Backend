@@ -5,7 +5,10 @@ export const items = {
         "description": "A bale of hay. Will recover 3 energy instantly.",
         "breakable" : true,
         "consumable" : true,
-        "uses" : 1
+        "uses" : 1,
+        "property" : { 
+            "currentEnergy" : 3
+        }
     },
     "Common Saddle": {
         "name": "Common Saddle",
