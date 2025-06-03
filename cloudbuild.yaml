@@ -24,7 +24,7 @@ steps:
           --region=southamerica-east1
           --platform=managed
           --allow-unauthenticated
-          --set-env-vars=JWT_SECRET=${_JWT_SECRET},SITE_DOMAIN=${_SITE_DOMAIN},SITE_URL=${_SITE_URL},NODE_ENV=${_NODE_ENV},PORT=8080,DATABASE_URL=${_DATABASE_URL}
+          --set-env-vars="JWT_SECRET=${_JWT_SECRET},SITE_DOMAIN=${_SITE_DOMAIN},SITE_URL=${_SITE_URL},NODE_ENV=${_NODE_ENV},DATABASE_URL=${_DATABASE_URL}"
           --add-cloudsql-instances=planethorse:southamerica-east1:planet-horse-db
 
 images:
