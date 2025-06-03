@@ -14,7 +14,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Prepare the runtime image
-FROM node:18-alpine
+FROM node:20
 
 WORKDIR /usr/src/app
 
