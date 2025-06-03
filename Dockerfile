@@ -1,5 +1,5 @@
 # Stage 1: Build the NestJS app
-FROM node:18-alpine AS builder
+FROM node:20 AS builder
 
 WORKDIR /usr/src/app
 
