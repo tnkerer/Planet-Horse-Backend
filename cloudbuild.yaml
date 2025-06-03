@@ -25,7 +25,7 @@ steps:
           --platform=managed
           --allow-unauthenticated
           --set-env-vars="JWT_SECRET=${_JWT_SECRET},SITE_DOMAIN=${_SITE_DOMAIN},SITE_URL=${_SITE_URL},NODE_ENV=${_NODE_ENV},DATABASE_URL=${_DATABASE_URL}"
-          --add-cloudsql-instances=planethorse:southamerica-east1:planet-horse-db
+          --add-cloudsql-instances=planethorse:us-east1:planet-horse-db-us
 
 images:
   - us-central1-docker.pkg.dev/planethorse/planet-horse-repo/planet-horse-backend:$SHORT_SHA
