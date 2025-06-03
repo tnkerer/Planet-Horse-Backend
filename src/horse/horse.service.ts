@@ -322,6 +322,7 @@ export class HorseService {
           currentEnergy: true,
           exp: true,
           level: true,
+          upgradable: true,
           currentPower: true,
           currentSprint: true,
           currentSpeed: true,
@@ -406,6 +407,8 @@ export class HorseService {
       const updatedExp = horse.exp + xpReward;
       const updatedPhorse = user.phorse + tokenReward;
       const updatedMedals = user.medals + medalReward;
+      const updatedUpgradable = updatedExp > xpProgression[horse.level] ? true : false;
+
 
       // 11) Perform updates in one transaction
       const [updatedUser, updatedHorse] = await Promise.all([
@@ -428,6 +431,7 @@ export class HorseService {
             exp: updatedExp,
             currentEnergy: newEnergy,
             status: finalStatus,
+            upgradable: updatedUpgradable
             // (we do NOT update level / stats here—this is purely “run a race”)
           },
         }),
