@@ -17,7 +17,7 @@ export interface RewardsSuccess {
 export class HorseService {
   constructor(private readonly prisma: PrismaService) { }
 
-  private readonly FAUCET_OWNER_ID = 'd53f0a96-9e10-48f2-92ed-a6db5b7efcef';
+  private readonly FAUCET_OWNER_ID = 'e425b759-fe1f-4641-ad3c-50bd8ae5663f';
   private readonly CLAIM_COST = 1000;
 
   /**
