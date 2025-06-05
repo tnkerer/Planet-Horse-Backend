@@ -28,8 +28,8 @@ export const globals = {
     "85": 1
   },
   "Energy Spent": 12,
-  "Energy Recovery Rate": 4,
+  "Energy Recovery Rate": 12,
   "Energy Recovery Interval": 14400, 
-  "Experience Multiplier": 1,
+  "Experience Multiplier": 4,
   "Recovery Cost" : 100
 } as const;
