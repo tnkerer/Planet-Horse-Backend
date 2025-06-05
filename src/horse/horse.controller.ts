@@ -38,10 +38,10 @@ export class HorseController {
   /**
   * PUT /horses/:tokenId/start-race
   *   - Requires JWT authentication
-  *   - Throttled to 25 calls/minute per user (to avoid spam)
+  *   - Throttled to 50 calls/minute per user (to avoid spam)
   */
   @Put(':tokenId/start-race')
-  @Throttle({ default: { limit: 25, ttl: 60_000 } })
+  @Throttle({ default: { limit: 50, ttl: 60_000 } })
   async startRace(@Request() req, @Param('tokenId') tokenId: string) {
     const ownerWallet = req.user.wallet as string;
     return this.horseService.startRace(ownerWallet, tokenId);
@@ -50,10 +50,10 @@ export class HorseController {
   /**
   * PUT /horses/:tokenId/restore
   *   - Must be authenticated
-  *   - Throttled to 5 calls/minute to prevent repeated abuse
+  *   - Throttled to 50 calls/minute to prevent repeated abuse
   */
   @Put(':tokenId/restore')
-  @Throttle({ default: { limit: 25, ttl: 60_000 } })
+  @Throttle({ default: { limit: 50, ttl: 60_000 } })
   async restoreHorse(@Request() req, @Param('tokenId') tokenId: string) {
     const ownerWallet = req.user.wallet as string;
     return this.horseService.restoreHorse(ownerWallet, tokenId);
@@ -62,10 +62,10 @@ export class HorseController {
   /**
    * PUT /horses/claim-horse  
    *    - Only in development/beta builds (DevOnlyGuard).  
-   *    - Throttled to 30 calls per minute.
+   *    - Throttled to 50 calls per minute.
    */
   @Put('claim-horse')
-  @Throttle({ default: { limit: 25, ttl: 60_000 } })
+  @Throttle({ default: { limit: 50, ttl: 60_000 } })
   async claimHorse(@Request() req) {
     // req.user is populated by your JWT/SIWE guard; assume it has `.wallet`
     const ownerWallet = req.user.wallet as string;
