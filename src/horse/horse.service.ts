@@ -153,6 +153,7 @@ export class HorseService {
           currentEnergy: true,
           maxEnergy: true,
           rarity: true,
+          status: true
         },
       });
       if (!horse) throw new NotFoundException('Horse not found');
@@ -173,6 +174,7 @@ export class HorseService {
         currentEnergy,
         maxEnergy,
         rarity,
+        status
       } = horse;
 
       // 3) Determine XP requirement for current level
@@ -265,6 +267,7 @@ export class HorseService {
             currentEnergy: updatedCurrentEnergy,
             exp: remainingXp,
             upgradable: newUpgradable,
+            status: updatedCurrentEnergy > 12 ? 'IDLE' : status,
           },
         }),
       ]);
