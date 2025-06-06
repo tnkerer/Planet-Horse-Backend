@@ -276,17 +276,18 @@ export class UserService {
             throw new NotFoundException('User not found');
         }
 
-        // 2) Group items by name
+        // 2) Group items by name AND uses (usesLeft)
         const groups = await this.prisma.item.groupBy({
-            by: ['name'],
+            by: ['name', 'uses'],
             where: { ownerId: user.id },
             _count: { _all: true },
         });
 
-        // 3) Map into the shape you want
+        // 3) Map into the shape: { name, usesLeft, quantity }
         return groups.map(g => ({
             name: g.name,
-            quantity: g._count._all,
+            usesLeft: g.uses,           // <─ Prisma’s `uses` column is the “remaining uses” for that group
+            quantity: g._count._all,    // how many items share (name, usesLeft)
         }));
     }
 }
