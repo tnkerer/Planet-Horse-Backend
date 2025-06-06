@@ -52,6 +52,39 @@ export const items = {
     }
 }
 
+export const itemModifiers = {
+    "Common Saddle" : {
+        positionBoost : 1,
+        hurtRate: 0.8,
+        xpMultiplier: 1,
+        energySaved: 0,
+    },
+    "Superior XP Potion" : {
+        positionBoost : 1,
+        hurtRate: 1,
+        xpMultiplier: 2,
+        energySaved: 0
+    },
+    "Common XP Potion": {
+        positionBoost : 1,
+        hurtRate: 1,
+        xpMultiplier: 1.5,
+        energySaved: 0,
+    },
+    "Common Horseshoe": {
+        positionBoost: 1.1,
+        hurtRate: 1,
+        xpMultiplier: 1,
+        energySaved: 0,
+    },
+    "Pumpers": {
+        positionBoost: 1.25,
+        hurtRate: 0.6,
+        xpMultiplier: 1,
+        energySaved: 0,
+    }
+}
+
 export const chests = {
     1: {
         "paused": false,

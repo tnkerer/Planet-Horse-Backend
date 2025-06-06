@@ -3,9 +3,12 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { HorseService, RewardsSuccess } from './horse.service';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { RewardsThrottlerGuard } from 'src/guards/rewards-throttler.guard';
+import { EquipItemDto } from './dto/equip-item.dto';
+import { UnequipItemDto } from './dto/unequip-item.dto';
 
 interface ConsumeDto {
   itemName: string;
+  usesLeft?: number;
 }
 
 @Controller('horses')
@@ -75,6 +78,55 @@ export class HorseController {
     return this.horseService.claimHorse(ownerWallet);
   }
 
+  /**
+* GET /horses/:tokenId/rewards
+* Returns { xpReward, tokenReward, position }
+*/
+  @Get(':tokenId/rewards')
+  @UseGuards(JwtAuthGuard)
+  async getRewards(
+    @Request() req,
+    @Param('tokenId') tokenId: string,
+  ): Promise<RewardsSuccess> {
+    return this.horseService.calculateRewards(req.user.wallet, tokenId);
+  }
+
+  /**
+  * PUT /horses/:tokenId/equip-item
+  *  Body: { name: string, usesLeft: number }
+  */
+  @Put(':tokenId/equip-item')
+  @UseGuards(JwtAuthGuard)
+  async equipItem(
+    @Request() req,
+    @Param('tokenId') tokenId: string,
+    @Body() dto: EquipItemDto,
+  ) {
+    const wallet = req.user.wallet as string;
+    if (!wallet) {
+      throw new BadRequestException('No authenticated wallet found.');
+    }
+    return this.horseService.equipItem(wallet, tokenId, dto);
+  }
+
+  /**
+  * PUT /horses/:tokenId/unequip-item
+  *  Body: { name: string }
+  */
+  @Put(':tokenId/unequip-item')
+  @UseGuards(JwtAuthGuard)
+  async unequipItem(
+    @Request() req,
+    @Param('tokenId') tokenId: string,
+    @Body() dto: UnequipItemDto,
+  ) {
+    const wallet = req.user.wallet as string;
+    if (!wallet) {
+      throw new BadRequestException('No authenticated wallet found.');
+    }
+    return this.horseService.unequipItem(wallet, tokenId, dto);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Put(':tokenId/consume')
   async consumeItem(
@@ -92,19 +144,5 @@ export class HorseController {
       body.itemName,
     );
   }
-
-  /**
-  * GET /horses/:tokenId/rewards
-  * Returns { xpReward, tokenReward, position }
-  */
-  @Get(':tokenId/rewards')
-  @UseGuards(JwtAuthGuard)
-  async getRewards(
-    @Request() req,
-    @Param('tokenId') tokenId: string,
-  ): Promise<RewardsSuccess> {
-    return this.horseService.calculateRewards(req.user.wallet, tokenId);
-  }
-
 
 }

@@ -1,11 +1,13 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { globals } from '../data/globals';
-import { items as allItems } from '../data/items';
+import { items as allItems, itemModifiers } from '../data/items';
 import { xpProgression } from '../data/xp_progression';
 import { lvlUpFee } from '../data/lvl_up_fee';
 import { rarityBase } from '../data/rarity_base';
 import { Status } from '@prisma/client';
+import { EquipItemDto } from './dto/equip-item.dto';
+import { UnequipItemDto } from './dto/unequip-item.dto';
 
 export interface RewardsSuccess {
   xpReward: number;
@@ -303,146 +305,121 @@ export class HorseService {
   */
   async startRace(ownerWallet: string, tokenId: string) {
     return this.prisma.$transaction(async (tx) => {
-      // 1) Fetch user
       const user = await tx.user.findUnique({
         where: { wallet: ownerWallet },
         select: { id: true, phorse: true, medals: true },
       });
-      if (!user) {
-        throw new NotFoundException('User not found');
-      }
+      if (!user) throw new NotFoundException('User not found');
 
-      // 2) Fetch horse
       const horse = await tx.horse.findUnique({
         where: { tokenId },
-        select: {
-          id: true,
-          ownerId: true,
-          status: true,
-          currentEnergy: true,
-          exp: true,
-          level: true,
-          upgradable: true,
-          currentPower: true,
-          currentSprint: true,
-          currentSpeed: true,
+        include: {
+          equipments: true, // to fetch equipped items
         },
       });
-      if (!horse) {
-        throw new NotFoundException('Horse not found');
-      }
-      if (horse.ownerId !== user.id) {
-        throw new ForbiddenException('Not your horse');
-      }
+      if (!horse) throw new NotFoundException('Horse not found');
+      if (horse.ownerId !== user.id) throw new ForbiddenException('Not your horse');
+      if (horse.status !== 'IDLE') throw new BadRequestException('Horse must be IDLE to start a race');
 
-      // 3) Status must be IDLE
-      if (horse.status !== 'IDLE') {
-        throw new BadRequestException('Horse must be IDLE to start a race');
-      }
+      const baseEnergy = globals['Energy Spent'] as number;
 
-      // 4) Energy check
-      const energySpent = globals['Energy Spent'] as number; // 12
+      // Aggregate modifiers from equipped items
+      const equippedModifiers = horse.equipments
+        .map((item) => itemModifiers[item.name])
+        .filter(Boolean);
+
+      const totalModifier = equippedModifiers.reduce(
+        (acc, mod) => ({
+          positionBoost: acc.positionBoost * mod.positionBoost,
+          hurtRate: acc.hurtRate * mod.hurtRate,
+          xpMultiplier: acc.xpMultiplier * mod.xpMultiplier,
+          energySaved: acc.energySaved + mod.energySaved,
+        }),
+        { positionBoost: 1, hurtRate: 1, xpMultiplier: 1, energySaved: 0 }
+      );
+
+      const energySpent = Math.max(1, baseEnergy - totalModifier.energySaved);
       if (horse.currentEnergy < energySpent) {
-        throw new BadRequestException(
-          `Not enough energy: need ${energySpent}, have ${horse.currentEnergy}`,
-        );
+        throw new BadRequestException(`Not enough energy: need ${energySpent}, have ${horse.currentEnergy}`);
       }
 
-      // 5) Calculate rewards (dup of calculateRewards logic, to avoid nested transaction)
       const totalStats = horse.currentPower + horse.currentSprint + horse.currentSpeed;
       const baseMod = totalStats / (globals['Base Denominator'] as number);
 
-      // Make a random roll in [0,100)
-      const roll = Math.random() * 100;
+      const roll = Math.min(100, Math.random() * 100 * totalModifier.positionBoost);
       const adjRoll = roll + 2.5 * horse.level;
 
-      // Find highest threshold ≤ adjRoll
       const winrates = globals['Winrates'] as Record<string, number>;
-      const thresholds = Object.keys(winrates)
-        .map((k) => parseFloat(k))
-        .sort((a, b) => a - b);
+      const thresholds = Object.keys(winrates).map(parseFloat).sort((a, b) => a - b);
 
       let chosenThreshold = thresholds[0];
       for (const t of thresholds) {
-        if (adjRoll >= t) {
-          chosenThreshold = t;
-        } else {
-          break;
-        }
+        if (adjRoll >= t) chosenThreshold = t;
+        else break;
       }
-      const position = winrates[chosenThreshold.toString()]; // 1..10
-
-      // Look up base reward for that finish‐position
+      const position = winrates[chosenThreshold.toString()];
       const rewardsCfg = globals['Rewards'] as Record<string, readonly [number, number]>;
       const [xpBase, tokenBase] = rewardsCfg[position.toString()];
 
-      // Compute xpReward & tokenReward
-      // “Experience Multiplier” is in globals, currently 1
-      const xpReward = Math.floor((xpBase * baseMod) * (globals['Experience Multiplier'] as number));
+      const baseXpReward = Math.floor(xpBase * baseMod * (globals['Experience Multiplier'] as number));
+      const xpReward = Math.floor(baseXpReward * totalModifier.xpMultiplier);
       const tokenReward = parseFloat((tokenBase * baseMod).toFixed(2));
-
-      // 6) Medal reward = 1 if position ≤ 3, else 0
       const medalReward = position <= 3 ? 1 : 0;
 
-      // 7) New energy after subtracting cost
       const newEnergy = horse.currentEnergy - energySpent;
-
-      // 8) Determine “hurt chance”: 1 / (log_base_1.3(totalStats))
-      //    log_base_1.3(x) = log(x)/log(1.3)
       const denom = Math.log(totalStats) / Math.log(1.6);
-      const hurtChance = denom > 0 ? 1 / denom : 0;
-      const random01 = Math.random();
-      const isHurt = random01 < hurtChance;
+      const hurtChance = Math.min(1, denom > 0 ? 1 / denom : 0);
+      const isHurt = Math.random() * totalModifier.hurtRate < hurtChance;
 
-      // 9) Decide new status
       let finalStatus: 'IDLE' | 'SLEEP' | 'BRUISED' = 'IDLE';
-      if (newEnergy < energySpent) {
-        finalStatus = 'SLEEP';
-      }
-      if (isHurt) {
-        finalStatus = 'BRUISED';
-      }
+      if (newEnergy < baseEnergy) finalStatus = 'SLEEP';
+      if (isHurt) finalStatus = 'BRUISED';
 
-      // 10) Prepare updated values
       const updatedExp = horse.exp + xpReward;
       const updatedPhorse = user.phorse + tokenReward;
       const updatedMedals = user.medals + medalReward;
-      const updatedUpgradable = updatedExp > xpProgression[horse.level] ? true : false;
+      const updatedUpgradable = updatedExp > xpProgression[horse.level];
 
+      // Decrement uses and delete items that reach 0
+      const itemUpdates = horse.equipments.map((item) => {
+        if (!itemModifiers[item.name]) return null;
+        const newUses = (item.uses ?? 0) - 1;
+        return newUses > 0
+          ? tx.item.update({
+            where: { id: item.id },
+            data: { uses: newUses },
+          })
+          : tx.item.delete({
+            where: { id: item.id },
+          });
+      }).filter(Boolean);
 
-      // 11) Perform updates in one transaction
       const [updatedUser, updatedHorse] = await Promise.all([
         tx.user.update({
           where: { id: user.id },
-          data: {
-            phorse: updatedPhorse,
-            medals: updatedMedals,
-          },
+          data: { phorse: updatedPhorse, medals: updatedMedals },
           select: { phorse: true, medals: true },
         }),
         tx.horse.updateMany({
           where: {
             id: horse.id,
-            status: 'IDLE',                // ensure no race state changed
-            exp: { gte: horse.exp },    // ensure exp is unchanged by another race
-            // currentEnergy ≥ energySpent also guaranteed above
+            status: 'IDLE',
+            exp: { gte: horse.exp },
           },
           data: {
             exp: updatedExp,
             currentEnergy: newEnergy,
             status: finalStatus,
-            upgradable: updatedUpgradable
-            // (we do NOT update level / stats here—this is purely “run a race”)
+            upgradable: updatedUpgradable,
           },
         }),
+        ...itemUpdates,
       ]);
 
       if (updatedHorse.count === 0) {
-        // Another concurrent operation likely changed the horse first
         throw new BadRequestException('Race failed: horse state was modified');
       }
 
-      // 12) Return the results
       return {
         xpReward,
         tokenReward,
@@ -452,6 +429,7 @@ export class HorseService {
       };
     });
   }
+
 
   /**
   * restoreHorse:
@@ -774,5 +752,169 @@ export class HorseService {
         remainingQuantityOfThatItem: leftoverCount,
       };
     });
+  }
+
+  /**
+  * Find a user by wallet address (returns only { id }).
+  * Throw NotFoundException if no such user.
+  */
+  private async findUserIdByWallet(wallet: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { wallet },
+      select: { id: true },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user.id;
+  }
+
+  /**
+   * 1) Checks ownership + existence of the horse by tokenId.
+   * 2) Enforces “max equipped slots” based on level:
+   *     level < 2: 0 slots
+   *     2 ≤ level < 7: 1 slot
+   *     7 ≤ level < 15: 2 slots
+   *     15 ≤ level: 3 slots
+   * 3) Finds the first Item owned by this user:
+   *     - item.name = dto.name
+   *     - item.uses = dto.usesLeft
+   *     - item.equipedBy = null  (i.e. currently not equipped)
+   * 4) If found, sets item.horseId = horse.id (in a single transaction).
+   */
+  async equipItem(
+    ownerWallet: string,
+    tokenId: string,
+    dto: EquipItemDto,
+  ): Promise<{ success: true }> {
+    // (1) Look up userId from wallet:
+    const userId = await this.findUserIdByWallet(ownerWallet);
+
+    // (2) Look up the horse by tokenId, ensure ownerId === userId:
+    const horse = await this.prisma.horse.findUnique({
+      where: { tokenId },
+      select: {
+        id: true,
+        ownerId: true,
+        level: true,
+        equipments: {
+          select: { id: true },
+        },
+      },
+    });
+    if (!horse) {
+      throw new NotFoundException(`Horse ${tokenId} not found`);
+    }
+    if (horse.ownerId !== userId) {
+      throw new ForbiddenException(`You do not own horse ${tokenId}`);
+    }
+
+    // (3) Determine how many items the horse is allowed to have equipped:
+    const currentlyEquippedCount = horse.equipments.length;
+    let maxSlots = 0;
+    if (horse.level >= 15) maxSlots = 3;
+    else if (horse.level >= 7) maxSlots = 2;
+    else if (horse.level >= 2) maxSlots = 1;
+    else maxSlots = 0;
+
+    if (currentlyEquippedCount >= maxSlots) {
+      throw new BadRequestException(
+        `Horse level ${horse.level} allows only ${maxSlots} item(s) equipped`,
+      );
+    }
+
+    // (4) Find the first matching Item row:
+    const matchingItem = await this.prisma.item.findFirst({
+      where: {
+        ownerId: userId,
+        name: dto.name,
+        uses: dto.usesLeft,
+        equipedBy: null, // not already equipped to any horse
+      },
+      orderBy: { createdAt: 'asc' }, // “take the oldest one first”
+    });
+    if (!matchingItem) {
+      throw new NotFoundException(
+        `No available item "${dto.name}" with ${dto.usesLeft} uses found in your bag`,
+      );
+    }
+
+    // (5) In a short transaction, update that item → equipedBy = horse.id:
+    await this.prisma.$transaction(async (tx) => {
+      // double‐check that the item is still un‐equipped & owned by the user:
+      const fresh = await tx.item.findUnique({
+        where: { id: matchingItem.id },
+        select: { equipedBy: true, ownerId: true },
+      });
+      if (!fresh) {
+        throw new NotFoundException(`Item no longer exists`);
+      }
+      if (fresh.ownerId !== userId) {
+        throw new ForbiddenException(`You do not own that item anymore`);
+      }
+      if (fresh.equipedBy !== null) {
+        throw new BadRequestException(`That item is already equipped`);
+      }
+      // finally, attach to horse:
+      await tx.item.update({
+        where: { id: matchingItem.id },
+        data: { horseId: horse.id },
+      });
+    });
+
+    return { success: true };
+  }
+
+  /**
+   * 1) Verify user → horse ownership (same as above).
+   * 2) In body, client sends { name }. We must confirm that this horse
+   *    actually has at least one equipped Item with that name.
+   * 3) Find EXACTLY one such item (e.g. the oldest). Then do `update(...)`
+   *    to set its `equipedBy = null`.
+   */
+  async unequipItem(
+    ownerWallet: string,
+    tokenId: string,
+    dto: UnequipItemDto,
+  ): Promise<{ success: true }> {
+    // (1) Find userId from wallet:
+    const userId = await this.findUserIdByWallet(ownerWallet);
+
+    // (2) Look up the horse and confirm ownership:
+    const horse = await this.prisma.horse.findUnique({
+      where: { tokenId },
+      select: {
+        id: true,
+        ownerId: true,
+        equipments: {
+          where: { name: dto.name, horseId: { not: null } },
+          select: { id: true },
+          orderBy: { createdAt: 'asc' },
+          take: 1,
+        },
+      },
+    });
+    if (!horse) {
+      throw new NotFoundException(`Horse ${tokenId} not found`);
+    }
+    if (horse.ownerId !== userId) {
+      throw new ForbiddenException(`You do not own horse ${tokenId}`);
+    }
+
+    // (3) Did the horse have any item with that name currently equipped?
+    if (horse.equipments.length === 0) {
+      throw new BadRequestException(
+        `Horse has no equipped item named "${dto.name}"`,
+      );
+    }
+    const itemToUnequipId = horse.equipments[0].id;
+
+    // (4) Detach in one simple update:
+    await this.prisma.item.update({
+      where: { id: itemToUnequipId },
+      data: { horseId: null },
+    });
+
+    return { success: true };
   }
 }

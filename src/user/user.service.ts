@@ -279,7 +279,10 @@ export class UserService {
         // 2) Group items by name AND uses (usesLeft)
         const groups = await this.prisma.item.groupBy({
             by: ['name', 'uses'],
-            where: { ownerId: user.id },
+            where: {
+                ownerId: user.id,
+                horseId: null
+            },
             _count: { _all: true },
         });
 
