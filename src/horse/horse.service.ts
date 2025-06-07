@@ -267,7 +267,7 @@ export class HorseService {
             currentEnergy: updatedCurrentEnergy,
             exp: remainingXp,
             upgradable: newUpgradable,
-            status: updatedCurrentEnergy > 12 ? 'IDLE' : status,
+            status: ((updatedCurrentEnergy > 11) && status == 'SLEEP') ? 'IDLE' : status,
           },
         }),
       ]);
