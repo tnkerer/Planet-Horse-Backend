@@ -12,7 +12,7 @@ export class EnergyRecoveryService {
     // We no longer need to page through batches; a single UPDATE suffices.
     @Cron('0 0 */4 * * *')
     public async handleEnergyRecovery(): Promise<void> {
-        this.logger.debug('⏰ Starting 4‐hour energy‐recovery cron (SQL version)…');
+        this.logger.debug('⏰ Starting 4-hour energy-recovery cron (SQL version)…');
 
         // Pull the two magic numbers out of your globals file:
         const baseRecovery: number = globals['Energy Recovery Rate'];

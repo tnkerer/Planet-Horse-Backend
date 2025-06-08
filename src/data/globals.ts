@@ -4,16 +4,16 @@ export const globals = {
   "Flat Racing Index": 1,
   "Draft Horse Pulling Index": 1,
   "Rewards": {
-    "1": [50, 250],
-    "2": [50, 150],
-    "3": [50, 140],
-    "4": [35, 75],
-    "5": [30, 60],
-    "6": [25, 50],
-    "7": [20, 20],
-    "8": [15, 10],
-    "9": [15, 0],
-    "10": [15, 0]
+    "1": [35, 250],
+    "2": [35, 150],
+    "3": [35, 140],
+    "4": [25, 75],
+    "5": [20, 60],
+    "6": [15, 50],
+    "7": [15, 20],
+    "8": [10, 10],
+    "9": [10, 0],
+    "10": [10, 0]
   },
   "Winrates": {
     "0": 10,
@@ -28,8 +28,8 @@ export const globals = {
     "85": 1
   },
   "Energy Spent": 12,
-  "Energy Recovery Rate": 12,
+  "Energy Recovery Rate": 4,
   "Energy Recovery Interval": 14400, 
-  "Experience Multiplier": 4,
+  "Experience Multiplier": 1,
   "Recovery Cost" : 100
 } as const;
