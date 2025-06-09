@@ -2,12 +2,12 @@ export const items = {
     "Hay": {
         "name": "Hay",
         "src": "hay",
-        "description": "A bale of hay. Will recover 3 energy instantly.",
+        "description": "A bale of hay. Will recover 4 energy instantly.",
         "breakable" : true,
         "consumable" : true,
         "uses" : 1,
         "property" : { 
-            "currentEnergy" : 3
+            "currentEnergy" : 4
         }
     },
     "Common Saddle": {
@@ -21,10 +21,10 @@ export const items = {
     "Superior XP Potion": {
         "name": "Superior XP Potion",
         "src": "xp",
-        "description": "Superior XP Potion, it doubles the XP earned from racing during the course of 15 races.",
+        "description": "Superior XP Potion, it doubles the XP earned from racing during the course of 8 races.",
         "breakable" : true,
         "consumable" : false,  
-        "uses" : 15
+        "uses" : 8
     },
     "Common XP Potion": {
         "name": "Common XP Potion",
@@ -37,10 +37,10 @@ export const items = {
     "Common Horseshoe": {
         "name": "Common Horseshoe",
         "src": "horseshoe",
-        "description": "A horseshoe. Improve the odds of a horse scoring a better position by 10% during the course of 30 races.",
+        "description": "A horseshoe. Improve the odds of a horse scoring a better position by 10% during the course of 12 races.",
         "breakable" : true,
         "consumable" : false,  
-        "uses" : 30
+        "uses" : 12
     },
         "Pumpers": {
         "name": "Pumpers",
@@ -88,20 +88,20 @@ export const itemModifiers = {
 export const chests = {
     1: {
         "paused": false,
-        "price": 250
+        "price": 500
     }
 }
 
 export const chestsPercentage = {
     1: {
         1 : "5000 phorse",
-        8 : "Superior XP Potion",
-        13 : "500 phorse",
-        23 : "Common XP Potion",
-        28 : "Common Horseshoe" ,
-        47 : "Common Saddle",
-        62 :  "Hay",
-        82 :  "Pumpers",
-        100 : "100 phorse"
+        6 : "1250 phorse",
+        13 : "Common Horseshoe" ,       
+        20 : "Superior XP Potion",
+        30 : "Common XP Potion",
+        40 : "Hay",
+        60 : "250 phorse",
+        80 : "Common Saddle",
+        100 :  "Pumpers",
     }
 }

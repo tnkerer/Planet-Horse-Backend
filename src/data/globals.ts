@@ -4,9 +4,9 @@ export const globals = {
   "Flat Racing Index": 1,
   "Draft Horse Pulling Index": 1,
   "Rewards": {
-    "1": [35, 250],
-    "2": [35, 150],
-    "3": [35, 140],
+    "1": [35, 190],
+    "2": [35, 120],
+    "3": [35, 95],
     "4": [25, 75],
     "5": [20, 60],
     "6": [15, 50],
@@ -28,7 +28,7 @@ export const globals = {
     "85": 1
   },
   "Energy Spent": 12,
-  "Energy Recovery Rate": 4,
+  "Energy Recovery Rate": 12,
   "Energy Recovery Interval": 14400, 
   "Experience Multiplier": 1,
   "Recovery Cost" : 100

@@ -2,7 +2,7 @@ import { Controller, Get, UseGuards, Request, Param, Post, Put, Req, BadGatewayE
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { HorseService, RewardsSuccess } from './horse.service';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
-import { RewardsThrottlerGuard } from 'src/guards/rewards-throttler.guard';
+import { EnergyRecoveryService } from './energy-recovery.service';
 import { EquipItemDto } from './dto/equip-item.dto';
 import { UnequipItemDto } from './dto/unequip-item.dto';
 
@@ -14,7 +14,7 @@ interface ConsumeDto {
 @Controller('horses')
 @UseGuards(JwtAuthGuard, ThrottlerGuard)
 export class HorseController {
-  constructor(private readonly horseService: HorseService) { }
+  constructor(private readonly horseService: HorseService, private readonly energyRecoveryService: EnergyRecoveryService) { }
 
   /** GET /horses → [{ id, tokenId, name, … }] */
   @Get()
@@ -143,6 +143,11 @@ export class HorseController {
       tokenId,
       body.itemName,
     );
+  }
+
+  @Get('next-energy-recovery')
+  getNextEnergyRecovery() {
+    return this.energyRecoveryService.getNextEnergyRecoveryTime();
   }
 
 }
