@@ -228,8 +228,8 @@ export class HorseService {
       const updatedPower = currentPower + incPower;
       const updatedSprint = currentSprint + incSprint;
       const updatedSpeed = currentSpeed + incSpeed;
-      const updatedMaxEnergy = maxEnergy + 3;
-      const updatedCurrentEnergy = currentEnergy + 3;
+      const updatedMaxEnergy = maxEnergy + 4;
+      const updatedCurrentEnergy = currentEnergy + 4;
 
       // 7) Subtract the XP for oldLevel
       const remainingXp = currentXp - requiredXp;
@@ -907,7 +907,7 @@ export class HorseService {
     // (3) Did the horse have any item with that name currently equipped?
     if (horse.equipments.length === 0) {
       throw new BadRequestException(
-        `Horse has no equipped item named "${dto.name}"`,
+        `Horse has no item named "${dto.name}" currently equipped!`,
       );
     }
     const itemToUnequipId = horse.equipments[0].id;
