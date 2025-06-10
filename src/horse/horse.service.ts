@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { PrismaService } from '../prisma/prisma.service';
 import { globals } from '../data/globals';
 import { items as allItems, itemModifiers } from '../data/items';
-import { xpProgression } from '../data/xp_progression';
+import { xpProgression, levelLimits } from '../data/xp_progression';
 import { lvlUpFee } from '../data/lvl_up_fee';
 import { rarityBase } from '../data/rarity_base';
 import { Status } from '@prisma/client';
@@ -225,6 +225,13 @@ export class HorseService {
 
       // 6) Compute new stats
       const newLevel = oldLevel + 1;
+      const maxLevelForRarity = levelLimits[rarity];
+      if (maxLevelForRarity === undefined) {
+        throw new BadRequestException(`Unknown level cap for rarity: ${rarity}`);
+      }
+      if (newLevel > maxLevelForRarity) {
+        throw new BadRequestException(`Max level for ${rarity} horses is ${maxLevelForRarity}`);
+      }
       const updatedPower = currentPower + incPower;
       const updatedSprint = currentSprint + incSprint;
       const updatedSpeed = currentSpeed + incSpeed;
@@ -234,11 +241,19 @@ export class HorseService {
       // 7) Subtract the XP for oldLevel
       const remainingXp = currentXp - requiredXp;
 
-      // 8) Determine if still upgradable for next level
-      const nextRequiredXp = xpProgression[newLevel];
+      // 8) Determine if still upgradable for next level,
+      //    but only if we haven’t already hit the rarity cap:
       let newUpgradable = false;
-      if (nextRequiredXp !== undefined && remainingXp >= nextRequiredXp) {
-        newUpgradable = true;
+      if (maxLevelForRarity === undefined) {
+        throw new BadRequestException(`Unknown level cap for rarity: ${rarity}`);
+      }
+
+      // Only consider “upgradable” if we’re still below the cap:
+      if (newLevel < maxLevelForRarity) {
+        const nextRequiredXp = xpProgression[newLevel];
+        if (nextRequiredXp !== undefined && remainingXp >= nextRequiredXp) {
+          newUpgradable = true;
+        }
       }
 
       // 9) Perform the combined updates in one operation
@@ -378,10 +393,26 @@ export class HorseService {
       if (newEnergy < baseEnergy) finalStatus = 'SLEEP';
       if (isHurt) finalStatus = 'BRUISED';
 
+      const maxLevelForRarity = levelLimits[horse.rarity];
+      if (maxLevelForRarity === undefined) {
+        throw new BadRequestException(`Unknown level cap for rarity: ${horse.rarity}`);
+      }
+
+
+
       const updatedExp = horse.exp + xpReward;
       const updatedPhorse = user.phorse + tokenReward;
       const updatedMedals = user.medals + medalReward;
-      const updatedUpgradable = updatedExp > xpProgression[horse.level];
+
+      // Determine “upgradable” only if we haven’t already hit the cap:
+      let updatedUpgradable = false;
+      if (horse.level < maxLevelForRarity) {
+        // xpProgression[horse.level] is the XP needed to go from current level → next
+        const nextXpReq = xpProgression[horse.level];
+        if (nextXpReq !== undefined && updatedExp >= nextXpReq) {
+          updatedUpgradable = true;
+        }
+      }
 
       // Decrement uses and delete items that reach 0
       const itemUpdates = horse.equipments.map((item) => {
