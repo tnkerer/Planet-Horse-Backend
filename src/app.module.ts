@@ -55,13 +55,13 @@ export class AppModule implements NestModule {
       )
       .exclude(
         // skip CSRF for your SIWE endpoints
-        { path: 'auth/nonce', method: RequestMethod.GET },
+/*         { path: 'auth/nonce', method: RequestMethod.GET },
         { path: 'auth/verify', method: RequestMethod.POST },
         { path: 'auth/logout', method: RequestMethod.POST },
         { path: 'user/chests/buy', method: RequestMethod.POST },
         { path: 'user/chests/open', method: RequestMethod.POST },
         { path: 'user/withdraw', method: RequestMethod.POST},
-        { path: 'horses/*', method: RequestMethod.PUT },
+        { path: 'horses/*', method: RequestMethod.PUT }, */
       )
       .forRoutes('*')
   }
