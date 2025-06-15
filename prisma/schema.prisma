@@ -2,9 +2,9 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   previewFeatures = []
-  engineType = "binary"
+  engineType      = "binary"
 }
 
 datasource db {
@@ -13,17 +13,18 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(uuid())
-  wallet        String    @unique
-  name          String?
-  horses        Horse[]
-  items         Item[]
-  transactions  Transaction[]
-  chests        Chest[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime? @updatedAt
-  phorse        Float @default(0)
-  medals        Int @default(0)
+  id           String          @id @default(uuid())
+  wallet       String          @unique
+  name         String?
+  horses       Horse[]
+  items        Item[]
+  transactions Transaction[]
+  chests       Chest[]
+  requests     BridgeRequest[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime?       @updatedAt
+  phorse       Float           @default(0)
+  medals       Int             @default(0)
 }
 
 model Nonce {
@@ -35,65 +36,86 @@ model Nonce {
 }
 
 model Horse {
-  id              String @id @default(uuid())
-  tokenId         String @unique
-  owner           User @relation(fields: [ownerId], references: [id])
-  ownerId         String
-  name            String
-  sex             Sex
-  status          Status
-  rarity          String
-  exp             Int
-  upgradable      Boolean
-  level		        Int
-  basePower       Int
-  currentPower    Int
-  baseSprint      Int
-  currentSprint   Int
-  baseSpeed       Int
-  currentSpeed    Int
-  currentEnergy   Int
-  maxEnergy       Int
-  equipments      Item[]
-  lastRace  DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime? @updatedAt
+  id            String    @id @default(uuid())
+  tokenId       String    @unique
+  owner         User      @relation(fields: [ownerId], references: [id])
+  ownerId       String
+  name          String
+  sex           Sex
+  status        Status
+  rarity        String
+  exp           Int
+  upgradable    Boolean
+  level         Int
+  basePower     Int
+  currentPower  Int
+  baseSprint    Int
+  currentSprint Int
+  baseSpeed     Int
+  currentSpeed  Int
+  currentEnergy Int
+  maxEnergy     Int
+  equipments    Item[]
+  lastRace      DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime? @updatedAt
+
   @@index([ownerId])
 }
 
 model Item {
-  id              String @id @default(uuid())
-  owner           User @relation(fields: [ownerId], references: [id])
-  ownerId         String
-  equipedBy       Horse? @relation(fields: [horseId], references: [id])
-  horseId         String?
-  name            String
-  value           Int
-  breakable       Boolean
-  uses            Int?
+  id        String    @id @default(uuid())
+  owner     User      @relation(fields: [ownerId], references: [id])
+  ownerId   String
+  equipedBy Horse?    @relation(fields: [horseId], references: [id])
+  horseId   String?
+  name      String
+  value     Int
+  breakable Boolean
+  uses      Int?
   createdAt DateTime  @default(now())
   updatedAt DateTime? @updatedAt
 }
 
 model Transaction {
-  id              String @id @default(uuid())
-  owner           User @relation(fields: [ownerId], references: [id])
-  ownerId         String
-  type            TransactionType
-  status          TransactionStatus
-  value           Float
-  note            String?
-  txId            String?
-  createdAt DateTime  @default(now())
+  id        String            @id @default(uuid())
+  owner     User              @relation(fields: [ownerId], references: [id])
+  ownerId   String
+  type      TransactionType
+  status    TransactionStatus
+  value     Float
+  note      String?
+  txId      String?
+  request   BridgeRequest?
+  createdAt DateTime          @default(now())
 }
 
 model Chest {
-    id              String @id @default(uuid())
-    owner           User @relation(fields: [ownerId], references: [id])
-    ownerId         String
-    chestType       Int
-    quantity        Int
-    @@unique([ownerId, chestType])
+  id        String @id @default(uuid())
+  owner     User   @relation(fields: [ownerId], references: [id])
+  ownerId   String
+  chestType Int
+  quantity  Int
+
+  @@unique([ownerId, chestType])
+}
+
+model BridgeRequest {
+  id            String      @id @default(uuid())
+  owner         User        @relation(fields: [requesterId], references: [id])
+  requesterId   String
+  request       Request
+  value         Float
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  transactionId String      @unique
+  createdAt     DateTime    @default(now())
+}
+
+enum Request {
+  DEPOSIT
+  WITHDRAW
+  BURN
+  MINT
 }
 
 enum Status {
@@ -111,6 +133,7 @@ enum TransactionType {
 enum TransactionStatus {
   FAILED
   PENDING
+  PROCESSING // ← new state you’re introducing
   COMPLETED
 }
 
@@ -119,3 +142,16 @@ enum Sex {
   FEMALE
 }
 
+model Meta {
+  key   String @id
+  value Int
+}
+
+model Deposit {
+  id          String   @id @default(uuid())
+  amount      Decimal  @db.Decimal(78, 18)
+  txHash      String   @unique
+  blockNumber Int
+  from        String
+  createdAt   DateTime @default(now())
+}

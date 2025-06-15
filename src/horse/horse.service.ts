@@ -202,9 +202,9 @@ export class HorseService {
       };
 
       // Three independent growth rolls
-      const incPower = rollGrowth() * 3;
-      const incSprint = rollGrowth() * 3;
-      const incSpeed = rollGrowth() * 3;
+      const incPower = rollGrowth() * 2;
+      const incSprint = rollGrowth() * 2;
+      const incSpeed = rollGrowth() * 2;
 
       // 5) Determine “level up” cost in phorse & medals for oldLevel
       const phorseCost = lvlUpFee.phorse[oldLevel];
@@ -275,9 +275,9 @@ export class HorseService {
           },
           data: {
             level: newLevel,
-            currentPower: Number(updatedPower.toFixed(2)),
-            currentSprint: Number(updatedSprint.toFixed(2)),
-            currentSpeed: Number(updatedSpeed.toFixed(2)),
+            currentPower: Number(Math.ceil(updatedPower)),
+            currentSprint: Number(Math.ceil(updatedSprint)),
+            currentSpeed: Number(Math.ceil(updatedSpeed)),
             maxEnergy: updatedMaxEnergy,
             currentEnergy: updatedCurrentEnergy,
             exp: remainingXp,

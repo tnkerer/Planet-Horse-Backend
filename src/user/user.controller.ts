@@ -1,6 +1,7 @@
-import { Controller, Get, UseGuards, Request, NotFoundException, Post, Body } from '@nestjs/common';
+import { Controller, Get, UseGuards, Request, NotFoundException, Post, Body, BadRequestException } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UserService } from './user.service';
+import { WithdrawDto } from './dto/withdraw.dto';
 
 @Controller('user')
 @UseGuards(JwtAuthGuard)
@@ -67,6 +68,38 @@ export class UserController {
   @Get('items')
   async listItems(@Request() req) {
     return this.users.listItems(req.user.wallet);
+  }
+
+  /**
+  * POST /user/withdraw
+  * Body: { amount: number }
+  */
+  @Post('withdraw')
+  async withdraw(
+    @Request() req,
+    @Body() body: any = {},            // ← default to empty object
+  ): Promise<{ transactionId: string }> {
+    // 1) Ensure we actually got an object
+    if (typeof body !== 'object' || body === null) {
+      throw new BadRequestException('Request body must be JSON');
+    }
+
+    // 2) Now safely pull out `amount`
+    const amount = body.amount;
+    if (typeof amount !== 'number') {
+      throw new BadRequestException('Request body must include a numeric "amount"');
+    }
+    if (amount <= 0) {
+      throw new BadRequestException('Amount must be greater than zero');
+    }
+
+    // 3) Delegate to the service
+    return this.users.phorseWithdraw(req.user.wallet, amount);
+  }
+
+  @Get('withdraw-tax')
+  async checkWithdrawTax(@Request() req) {
+    return this.users.getWithdrawTax(req.user.wallet);
   }
 
 }

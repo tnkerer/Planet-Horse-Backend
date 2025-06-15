@@ -31,5 +31,5 @@ export const globals = {
   "Energy Recovery Rate": 12,
   "Energy Recovery Interval": 14400, 
   "Experience Multiplier": 1,
-  "Recovery Cost" : 100
+  "Recovery Cost" : 125
 } as const;

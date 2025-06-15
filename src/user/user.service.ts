@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { chests } from 'src/data/items';
-import { TransactionStatus, TransactionType } from '@prisma/client';
+import { TransactionStatus, TransactionType, Request } from '@prisma/client';
 import { chestsPercentage, items } from '../data/items';
+import { getWithdrawTax } from './withdraw-tax';
 
 @Injectable()
 export class UserService {
@@ -293,4 +294,111 @@ export class UserService {
             quantity: g._count._all,    // how many items share (name, usesLeft)
         }));
     }
+
+    /**
+    * 1. Validate amount
+    * 2. Atomically “reserve” PHORSE via a decrement-if-enough
+    * 3. Create a PENDING Transaction
+    * 4. Create the BridgeRequest pointing at that Transaction
+    * 5. All in one Prisma TX ⇒ full rollback on any failure
+    */
+    async phorseWithdraw(ownerWallet: string, amount: number) {
+        // 1) sanity‐check
+        if (!Number.isFinite(amount) || amount <= 0) {
+            throw new BadRequestException('Invalid withdraw amount');
+        }
+
+        return this.prisma.$transaction(async (tx) => {
+            // 2) reserve the PHORSE balance
+            const dec = await tx.user.updateMany({
+                where: {
+                    wallet: ownerWallet,
+                    phorse: { gte: amount },       // must have at least this much
+                },
+                data: {
+                    phorse: { decrement: amount }, // atomic decrement
+                },
+            });
+            if (dec.count === 0) {
+                throw new BadRequestException('Insufficient PHORSE balance');
+            }
+
+            // 3) fetch the user’s internal id
+            const user = await tx.user.findUnique({
+                where: { wallet: ownerWallet },
+                select: { id: true },
+            });
+            if (!user) {
+                // (shouldn’t happen, but guard anyway)
+                throw new NotFoundException('User not found');
+            }
+
+            // 4) create the PENDING withdrawal transaction
+            const transaction = await tx.transaction.create({
+                data: {
+                    owner: { connect: { id: user.id } },
+                    type: TransactionType.WITHDRAW,
+                    status: TransactionStatus.PENDING,
+                    value: amount,
+                    note: `Requested withdraw of ${amount} PHORSE`,
+                    txId: null,
+                },
+            });
+
+            // 5) create the BridgeRequest linked 1:1 to that transaction
+            await tx.bridgeRequest.create({
+                data: {
+                    owner: { connect: { id: user.id } },
+                    request: Request.WITHDRAW,
+                    value: amount,
+                    transaction: { connect: { id: transaction.id } },
+                },
+            });
+
+            // 6) return the pending TX for client‐side tracking
+            return { transactionId: transaction.id, message: `Transaction ${transaction.id.slice(0, 8)} added to the bridge queue!` };
+        });
+    }
+
+    async getWithdrawTax(wallet: string) {
+        const user = await this.prisma.user.findUnique({
+            where: { wallet },
+            select: { id: true },
+        });
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
+
+        const lastWithdraw = await this.prisma.transaction.findFirst({
+            where: {
+                ownerId: user.id,
+                type: 'WITHDRAW',
+                status: 'COMPLETED',
+            },
+            orderBy: {
+                createdAt: 'desc',
+            },
+        });
+
+        if (!lastWithdraw) {
+            // No previous withdraw ⇒ highest tax bracket (100%)
+            return {
+                userPct: 100,
+                taxPct: 0,
+                hoursSinceLast: null,
+            };
+        }
+
+        const diffMs = Date.now() - lastWithdraw.createdAt.getTime();
+        const diffHours = diffMs / 1000 / 60 / 60;
+
+        const bracket = getWithdrawTax(diffHours);
+
+        return {
+            userPct: bracket.userPct,
+            taxPct: 100 - bracket.userPct,
+            hoursSinceLast: diffHours,
+        };
+    }
+
 }
