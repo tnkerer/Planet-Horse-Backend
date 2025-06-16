@@ -88,6 +88,7 @@ model Transaction {
   txId      String?
   request   BridgeRequest?
   createdAt DateTime          @default(now())
+  updatedAt DateTime? @updatedAt
 }
 
 model Chest {

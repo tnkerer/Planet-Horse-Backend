@@ -4,6 +4,7 @@ import { chests } from 'src/data/items';
 import { TransactionStatus, TransactionType, Request } from '@prisma/client';
 import { chestsPercentage, items } from '../data/items';
 import { getWithdrawTax } from './withdraw-tax';
+import { Throttle } from '@nestjs/throttler';
 
 @Injectable()
 export class UserService {
@@ -302,6 +303,7 @@ export class UserService {
     * 4. Create the BridgeRequest pointing at that Transaction
     * 5. All in one Prisma TX ⇒ full rollback on any failure
     */
+    @Throttle({ default: { limit: 10, ttl: 30_000 } })
     async phorseWithdraw(ownerWallet: string, amount: number) {
         // 1) sanity‐check
         if (!Number.isFinite(amount) || amount <= 0) {
