@@ -2,9 +2,10 @@ import { Controller, Get, UseGuards, Request, NotFoundException, Post, Body, Bad
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UserService } from './user.service';
 import { WithdrawDto } from './dto/withdraw.dto';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 
 @Controller('user')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ThrottlerGuard)
 export class UserController {
   constructor(private readonly users: UserService) { }
 
@@ -74,6 +75,7 @@ export class UserController {
   * POST /user/withdraw
   * Body: { amount: number }
   */
+  @Throttle({ default: { limit: 1, ttl: 60_000 } })
   @Post('withdraw')
   async withdraw(
     @Request() req,
