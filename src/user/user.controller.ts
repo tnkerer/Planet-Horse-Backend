@@ -74,7 +74,7 @@ export class UserController {
   * POST /user/withdraw
   * Body: { amount: number }
   */
-  @Post('withdraw')
+/*   @Post('withdraw')
   async withdraw(
     @Request() req,
     @Body() body: any = {},            // ← default to empty object
@@ -95,7 +95,7 @@ export class UserController {
 
     // 3) Delegate to the service
     return this.users.phorseWithdraw(req.user.wallet, amount);
-  }
+  } */
 
   @Get('withdraw-tax')
   async checkWithdrawTax(@Request() req) {

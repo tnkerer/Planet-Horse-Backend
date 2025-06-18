@@ -13,42 +13,42 @@ export const items = {
     "Common Saddle": {
         "name": "Common Saddle",
         "src": "saddle",
-        "description": "A common saddle, it will decrease the chance of a horse getting hurt by 20% during the course of 10 races.",
+        "description": "A common saddle, it will decrease the chance of a horse getting hurt by 20% during the course of 6 races.",
         "breakable" : true,
         "consumable" : false,        
-        "uses" : 10
+        "uses" : 6
     },
     "Superior XP Potion": {
         "name": "Superior XP Potion",
         "src": "xp",
-        "description": "Superior XP Potion, it doubles the XP earned from racing during the course of 8 races.",
+        "description": "Superior XP Potion, it doubles the XP earned from racing during the course of 4 races.",
         "breakable" : true,
         "consumable" : false,  
-        "uses" : 8
+        "uses" : 4
     },
     "Common XP Potion": {
         "name": "Common XP Potion",
         "src": "common_xp",
-        "description": "Common XP Potion, it grants +50% XP from racing during the course of 5 races.",
+        "description": "Common XP Potion, it grants +50% XP from racing during the course of 4 races.",
         "breakable" : true,
         "consumable" : false,  
-        "uses" : 5
+        "uses" : 4
     },
     "Common Horseshoe": {
         "name": "Common Horseshoe",
         "src": "horseshoe",
-        "description": "A horseshoe. Improve the odds of a horse scoring a better position by 10% during the course of 12 races.",
+        "description": "A horseshoe. Improve the odds of a horse scoring a better position by 10% during the course of 6 races.",
         "breakable" : true,
         "consumable" : false,  
-        "uses" : 12
+        "uses" : 6
     },
         "Pumpers": {
         "name": "Pumpers",
         "src": "bump",
-        "description": "A performance enhancing drug that greatly increases your chances of securing a better position, but also raises the risk of injury. Enough for 10 uses.",
+        "description": "A performance enhancing drug that greatly increases your chances of securing a better position, but also raises the risk of injury. Enough for 5 uses.",
         "breakable" : true,
         "consumable" : false,  
-        "uses" : 10
+        "uses" : 5
     }
 }
 

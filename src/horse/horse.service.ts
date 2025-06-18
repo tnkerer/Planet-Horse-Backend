@@ -365,7 +365,7 @@ export class HorseService {
       const baseMod = totalStats / (globals['Base Denominator'] as number);
 
       const roll = Math.min(100, Math.random() * 100 * totalModifier.positionBoost);
-      const adjRoll = roll + 2.5 * horse.level;
+      const adjRoll = roll + 1.5 * horse.level;
 
       const winrates = globals['Winrates'] as Record<string, number>;
       const thresholds = Object.keys(winrates).map(parseFloat).sort((a, b) => a - b);
