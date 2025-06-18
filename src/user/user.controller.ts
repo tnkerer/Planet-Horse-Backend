@@ -91,8 +91,8 @@ export class UserController {
     if (typeof amount !== 'number') {
       throw new BadRequestException('Request body must include a numeric "amount"');
     }
-    if (amount <= 1) {
-      throw new BadRequestException('Amount must be greater than 1');
+    if (amount <= 999) {
+      throw new BadRequestException('Amount must be greater than 999');
     }
 
     // 3) Delegate to the service
