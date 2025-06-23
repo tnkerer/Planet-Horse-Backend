@@ -8,6 +8,11 @@ import { rarityBase } from '../data/rarity_base';
 import { Status } from '@prisma/client';
 import { EquipItemDto } from './dto/equip-item.dto';
 import { UnequipItemDto } from './dto/unequip-item.dto';
+import Moralis from 'moralis';
+
+const MORALIS_API_KEY = process.env.MORALIS_API_KEY; // Use .env file for safety
+const NFT_CONTRACT_ADDRESS = process.env.NFT_CONTRACT_ADDRESS || '0xC15878E61fc284ff83cf0dBA532226387A7E083e'; // Your contract address
+const CHAIN_ID = 2021;
 
 export interface RewardsSuccess {
   xpReward: number;
@@ -20,7 +25,6 @@ export class HorseService {
   constructor(private readonly prisma: PrismaService) { }
 
   private readonly FAUCET_OWNER_ID = 'e425b759-fe1f-4641-ad3c-50bd8ae5663f';
-  private readonly CLAIM_COST = 1000;
 
   /**
   * List all horses owned by the user with the given wallet.
@@ -44,66 +48,99 @@ export class HorseService {
     });
   }
 
-  /**
-  * Compute rewards for a single horse, ensuring only the owner can call it.
-  */
-  async calculateRewards(
-    ownerWallet: string,
-    tokenId: string,
-  ): Promise<RewardsSuccess> {
-    // 1) Lookup user ID from wallet
-    const user = await this.prisma.user.findUnique({
-      where: { wallet: ownerWallet },
-      select: { id: true },
-    });
-    if (!user) throw new NotFoundException('User not found');
-
-    // 2) Fetch the horse, ensure it's owned by this user
-    const horse = await this.prisma.horse.findUnique({
-      where: { tokenId },
-      select: {
-        ownerId: true,
-        currentPower: true,
-        currentSprint: true,
-        currentSpeed: true,
-        level: true,
-      },
-    });
-    if (!horse) throw new NotFoundException('Horse not found');
-    if (horse.ownerId !== user.id) {
-      throw new ForbiddenException('Not your horse');
+  private async initMoralis() {
+    if (!Moralis.Core.isStarted) {
+      await Moralis.start({ apiKey: MORALIS_API_KEY });
     }
+  }
 
-    // 3) Compute baseRewardModifier
-    const { currentPower, currentSprint, currentSpeed, level } = horse;
-    const denom = globals["Base Denominator"];
-    const baseRewardModifier = (currentPower + currentSprint + currentSpeed) / denom;
+  async listBlockchainHorses(walletAddress: string) {
+    await this.initMoralis();
 
-    // 4) Roll + level bonus
-    const roll = Math.random() * 100;
-    const adjRoll = roll + 2.5 * level;
+    return await this.prisma.$transaction(async (tx) => {
+      // 1. Lookup user in DB (fail if user doesn't exist)
+      const user = await tx.user.findUnique({
+        where: { wallet: walletAddress.toLowerCase() },
+        select: { id: true },
+      });
 
-    // 5) Determine position via Winrates thresholds
-    const winrates = globals['Winrates'];
-    const thresholds = Object.keys(winrates)
-      .map(k => parseFloat(k))
-      .sort((a, b) => a - b);
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
 
-    let chosen = thresholds[0];
-    for (const t of thresholds) {
-      if (adjRoll >= t) chosen = t;
-      else break;
-    }
-    const position = winrates[chosen.toString()];
+      const userId = user.id;
 
-    // 6) Lookup base rewards and apply modifier
-    const rewardsCfg = globals['Rewards'];
-    const [xpBase, tokenBase] = rewardsCfg[position.toString()] || [0, 0];
+      // 2. Fetch token IDs from blockchain (NFTs)
+      const response = await Moralis.EvmApi.nft.getWalletNFTs({
+        chain: CHAIN_ID,
+        format: 'decimal',
+        normalizeMetadata: false,
+        tokenAddresses: [NFT_CONTRACT_ADDRESS],
+        mediaItems: false,
+        address: walletAddress,
+      });
 
-    const xpReward = parseFloat((xpBase * baseRewardModifier).toFixed(2));
-    const tokenReward = parseFloat((tokenBase * baseRewardModifier).toFixed(2));
+      const nftList = response.raw.result;
 
-    return { xpReward, tokenReward, position };
+      if (!nftList || nftList.length === 0) {
+        return [];
+      }
+
+      const tokenIds = nftList.map((nft: any) => (BigInt(nft.token_id)).toString());
+
+      // 3. Fetch current horses matching tokenIds
+      const horses = await tx.horse.findMany({
+        where: {
+          tokenId: { in: tokenIds },
+        },
+        select: {
+          id: true,
+          tokenId: true,
+          ownerId: true,
+        },
+      });
+
+      const mismatchedHorseIds = horses
+        .filter(h => h.ownerId !== userId)
+        .map(h => h.id);
+
+      // 4. If any mismatched horses, fix ownership in one SQL update
+      // plus unequip all items that horse had equipped
+      if (mismatchedHorseIds.length > 0) {
+        await tx.$executeRawUnsafe(
+          `
+        UPDATE "Horse"
+        SET "ownerId" = $1
+        WHERE "id" = ANY($2)
+        `,
+          userId,
+          mismatchedHorseIds
+        );
+
+        await tx.$executeRawUnsafe(
+          `
+        UPDATE "Item"
+        SET "horseId" = NULL
+        WHERE "horseId" = ANY($1)
+        `,
+          mismatchedHorseIds
+        );
+      }
+
+      // 5. Fetch full horse data for response (with correct ownership)
+      const horseDetails = await tx.horse.findMany({
+        where: {
+          tokenId: { in: tokenIds },
+        },
+        include: { equipments: true },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return horseDetails.map(horse => ({
+        ...horse,
+        isDeposit: true,
+      }));
+    });
   }
 
   /**

@@ -5,6 +5,7 @@ import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { EnergyRecoveryService } from './energy-recovery.service';
 import { EquipItemDto } from './dto/equip-item.dto';
 import { UnequipItemDto } from './dto/unequip-item.dto';
+import { IsOwnerGuard } from 'src/guards/is-owner.guard';
 
 interface ConsumeDto {
   itemName: string;
@@ -23,11 +24,18 @@ export class HorseController {
     return this.horseService.listHorses(req.user.wallet);
   }
 
+  @Get('blockchain')
+  async listBlockchainHorses(@Request() req) {
+    // req.user.wallet is set by JwtStrategy.validate()
+    return this.horseService.listBlockchainHorses(req.user.wallet);
+  }
+
   /**
   * PUT /horses/:tokenId/level-up
   *   - No request body needed (growth is rolled internally).
   *   - Throttle: max 10 calls per 60s per user.
   */
+  @UseGuards(IsOwnerGuard)
   @Put(':tokenId/level-up')
   @Throttle({ default: { limit: 100, ttl: 30_000 } })
   async levelUp(
@@ -43,6 +51,7 @@ export class HorseController {
   *   - Requires JWT authentication
   *   - Throttled to 50 calls/minute per user (to avoid spam)
   */
+  @UseGuards(IsOwnerGuard)
   @Put(':tokenId/start-race')
   @Throttle({ default: { limit: 250, ttl: 30_000 } })
   async startRace(@Request() req, @Param('tokenId') tokenId: string) {
@@ -55,6 +64,7 @@ export class HorseController {
   *   - Must be authenticated
   *   - Throttled to 50 calls/minute to prevent repeated abuse
   */
+  @UseGuards(IsOwnerGuard)
   @Put(':tokenId/restore')
   @Throttle({ default: { limit: 250, ttl: 30_000 } })
   async restoreHorse(@Request() req, @Param('tokenId') tokenId: string) {
@@ -67,7 +77,7 @@ export class HorseController {
    *    - Only in development/beta builds (DevOnlyGuard).  
    *    - Throttled to 50 calls per minute.
    */
-  @Put('claim-horse')
+  /* @Put('claim-horse')
   @Throttle({ default: { limit: 500, ttl: 30_000 } })
   async claimHorse(@Request() req) {
     // req.user is populated by your JWT/SIWE guard; assume it has `.wallet`
@@ -76,25 +86,13 @@ export class HorseController {
       throw new BadGatewayException('No authenticated wallet found.');
     }
     return this.horseService.claimHorse(ownerWallet);
-  }
-
-  /**
-* GET /horses/:tokenId/rewards
-* Returns { xpReward, tokenReward, position }
-*/
-  @Get(':tokenId/rewards')
-  @UseGuards(JwtAuthGuard)
-  async getRewards(
-    @Request() req,
-    @Param('tokenId') tokenId: string,
-  ): Promise<RewardsSuccess> {
-    return this.horseService.calculateRewards(req.user.wallet, tokenId);
-  }
+  } */
 
   /**
   * PUT /horses/:tokenId/equip-item
   *  Body: { name: string, usesLeft: number }
   */
+  @UseGuards(IsOwnerGuard)
   @Put(':tokenId/equip-item')
   @UseGuards(JwtAuthGuard)
   async equipItem(
@@ -113,6 +111,7 @@ export class HorseController {
   * PUT /horses/:tokenId/unequip-item
   *  Body: { name: string }
   */
+  @UseGuards(IsOwnerGuard)
   @Put(':tokenId/unequip-item')
   @UseGuards(JwtAuthGuard)
   async unequipItem(
