@@ -75,7 +75,7 @@ export class UserController {
   * POST /user/withdraw
   * Body: { amount: number }
   */
-  @Throttle({ default: { limit: 1, ttl: 300_000 } })
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('withdraw')
   async withdraw(
     @Request() req,
