@@ -445,7 +445,7 @@ export class UserService {
                 id: { in: horses.map(h => h.id) },
                 presaleIntent: {
                     isNot: null,
-                    // is: { status: { not: IntentStage.STARTED } }
+                    is: { status: { not: IntentStage.FAILED } }
                 }
             },
             select: { tokenId: true },

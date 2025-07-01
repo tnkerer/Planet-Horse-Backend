@@ -189,4 +189,5 @@ enum IntentStage {
   STARTED
   PROCESSING
   DONE
+  FAILED
 }
