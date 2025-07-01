@@ -1,10 +1,4 @@
-export interface TaxBracket {
-  maxHours: number;
-  userPct: number; // % user keeps
-}
-
-// src/bridge-cron/data.ts
-export interface WithdrawTaxConfig {
+interface WithdrawTaxConfig {
   /** % of the payout the user keeps on day 0 (i.e. initial) */
   initialUserPct: number;
   /** how many % to *add* to user’s share each step */
@@ -14,21 +8,16 @@ export interface WithdrawTaxConfig {
   /** never exceed this */
   maxUserPct: number;
 }
-
-export const withdrawTaxConfig: WithdrawTaxConfig = {
-  initialUserPct: 50,   // Day 0 user keeps 50%; bridge keeps 50%
-  stepPct: 10,   // +10 pts to user’s share each day
-  stepIntervalHours: 24,   // 1 step per 24 h
-  maxUserPct: 100,   // cap at 100%
-};
-
-
+/**
+ * Given hours since last withdrawal (or 0 if none),
+ * return the % of the value the user actually receives.
+ */
 export function getWithdrawUserPct(
   hoursSince: number,
   cfg: WithdrawTaxConfig
 ): number {
   // Treat “never withdrawn” as 0h elapsed → day 0 rate
   const steps = Math.floor(hoursSince / cfg.stepIntervalHours);
-  const pct = cfg.initialUserPct + steps * cfg.stepPct;
+  const pct   = cfg.initialUserPct + steps * cfg.stepPct;
   return Math.min(pct, cfg.maxUserPct);
 }

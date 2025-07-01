@@ -25,6 +25,9 @@ model User {
   updatedAt    DateTime?       @updatedAt
   phorse       Float           @default(0)
   medals       Int             @default(0)
+  totalPhorseEarned Float       @default(0)
+  totalPhorseSpent  Float       @default(0)
+  presalePhorse     Float       @default(0)
 }
 
 model Nonce {
@@ -59,6 +62,9 @@ model Horse {
   lastRace      DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime? @updatedAt
+  raceHistory   RaceHistory[]
+  presaleIntent PresaleIntent?  @relation(fields: [intentId], references: [id])
+  intentId      String?
 
   @@index([ownerId])
 }
@@ -155,4 +161,32 @@ model Deposit {
   blockNumber Int
   from        String
   createdAt   DateTime @default(now())
+}
+
+/// A historical record of each race result for a given horse
+model RaceHistory {
+  id            String    @id @default(uuid())
+  createdAt     DateTime  @default(now())
+  phorseEarned  Float
+  xpEarned      Int
+  position      Int
+  horse         Horse     @relation(fields: [horseId], references: [id])
+  horseId       String
+
+  @@index([horseId])
+}
+
+model PresaleIntent {
+  id            String    @id @default(uuid())
+  createdAt     DateTime  @default(now())
+  amount        Int
+  wallet        String
+  status        IntentStage
+  vouchedHorses Horse[]
+}
+
+enum IntentStage {
+  STARTED
+  PROCESSING
+  DONE
 }

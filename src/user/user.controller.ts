@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UserService } from './user.service';
 import { WithdrawDto } from './dto/withdraw.dto';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { CreatePresaleIntentDto } from './dto/create-presale-intent.dto';
 
 @Controller('user')
 @UseGuards(JwtAuthGuard, ThrottlerGuard)
@@ -75,7 +76,7 @@ export class UserController {
   * POST /user/withdraw
   * Body: { amount: number }
   */
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Throttle({ default: { limit: 25, ttl: 60_000 } })
   @Post('withdraw')
   async withdraw(
     @Request() req,
@@ -102,6 +103,15 @@ export class UserController {
   @Get('withdraw-tax')
   async checkWithdrawTax(@Request() req) {
     return this.users.getWithdrawTax(req.user.wallet);
+  }
+
+  @Post('presale-intent')
+  async createPresaleIntent(
+    @Request() req,
+    @Body() dto: CreatePresaleIntentDto
+  ) {
+    // normalize to lowercase
+    return this.users.createPresaleIntent(req.user.wallet, dto.amount);
   }
 
 }

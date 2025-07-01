@@ -11,8 +11,8 @@ import { UnequipItemDto } from './dto/unequip-item.dto';
 import Moralis from 'moralis';
 
 const MORALIS_API_KEY = process.env.MORALIS_API_KEY; // Use .env file for safety
-const NFT_CONTRACT_ADDRESS = process.env.NFT_CONTRACT_ADDRESS || '0xC15878E61fc284ff83cf0dBA532226387A7E083e'; // Your contract address
-const CHAIN_ID = 2021;
+const NFT_CONTRACT_ADDRESS = process.env.NFT_CONTRACT_ADDRESS || '0x66eeb20a1957c4b3743ecad19d0c2dbcf56b683f'; // Your contract address
+const CHAIN_ID = 2020;
 
 export interface RewardsSuccess {
   xpReward: number;
@@ -23,30 +23,6 @@ export interface RewardsSuccess {
 @Injectable()
 export class HorseService {
   constructor(private readonly prisma: PrismaService) { }
-
-  private readonly FAUCET_OWNER_ID = 'e425b759-fe1f-4641-ad3c-50bd8ae5663f';
-
-  /**
-  * List all horses owned by the user with the given wallet.
-  */
-  async listHorses(ownerWallet: string) {
-    // 1) Lookup the user’s internal ID from their wallet
-    const user = await this.prisma.user.findUnique({
-      where: { wallet: ownerWallet },
-      select: { id: true },
-    });
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    // 2) Fetch all horses for that owner
-    return this.prisma.horse.findMany({
-      where: { ownerId: user.id },
-      // include equipments if you want:
-      include: { equipments: true },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
 
   private async initMoralis() {
     if (!Moralis.Core.isStarted) {
@@ -171,7 +147,7 @@ export class HorseService {
       // 1) Lookup user & their phorse/medals balance
       const user = await tx.user.findUnique({
         where: { wallet: ownerWallet },
-        select: { id: true, phorse: true, medals: true },
+        select: { id: true, phorse: true, medals: true, totalPhorseSpent: true },
       });
       if (!user) throw new NotFoundException('User not found');
 
@@ -300,6 +276,7 @@ export class HorseService {
           where: { id: user.id },
           data: {
             phorse: user.phorse - phorseCost,
+            totalPhorseSpent: user.totalPhorseSpent + phorseCost,
             medals: user.medals - medalCost,
           },
           select: { phorse: true, medals: true },
@@ -362,7 +339,7 @@ export class HorseService {
     return this.prisma.$transaction(async (tx) => {
       const user = await tx.user.findUnique({
         where: { wallet: ownerWallet },
-        select: { id: true, phorse: true, medals: true },
+        select: { id: true, phorse: true, medals: true, totalPhorseEarned: true },
       });
       if (!user) throw new NotFoundException('User not found');
 
@@ -435,11 +412,10 @@ export class HorseService {
         throw new BadRequestException(`Unknown level cap for rarity: ${horse.rarity}`);
       }
 
-
-
       const updatedExp = horse.exp + xpReward;
       const updatedPhorse = user.phorse + tokenReward;
       const updatedMedals = user.medals + medalReward;
+      const updatedTotalPhorseEarned = user.totalPhorseEarned + tokenReward;
 
       // Determine “upgradable” only if we haven’t already hit the cap:
       let updatedUpgradable = false;
@@ -468,7 +444,7 @@ export class HorseService {
       const [updatedUser, updatedHorse] = await Promise.all([
         tx.user.update({
           where: { id: user.id },
-          data: { phorse: updatedPhorse, medals: updatedMedals },
+          data: { phorse: updatedPhorse, medals: updatedMedals, totalPhorseEarned: updatedTotalPhorseEarned },
           select: { phorse: true, medals: true },
         }),
         tx.horse.updateMany({
@@ -487,9 +463,20 @@ export class HorseService {
         ...itemUpdates,
       ]);
 
+
+
       if (updatedHorse.count === 0) {
         throw new BadRequestException('Race failed: horse state was modified');
       }
+
+      await tx.raceHistory.create({
+        data: {
+          horseId: horse.id,
+          phorseEarned: tokenReward,
+          xpEarned: xpReward,
+          position,                  // same `position` you already computed
+        },
+      });
 
       return {
         xpReward,
@@ -516,7 +503,7 @@ export class HorseService {
       // 1) Find user
       const user = await tx.user.findUnique({
         where: { wallet: ownerWallet },
-        select: { id: true, phorse: true },
+        select: { id: true, phorse: true, totalPhorseSpent: true },
       });
       if (!user) {
         throw new NotFoundException('User not found');
@@ -563,7 +550,7 @@ export class HorseService {
       const [updatedUser, updatedHorse] = await Promise.all([
         tx.user.update({
           where: { id: user.id },
-          data: { phorse: user.phorse - cost },
+          data: { phorse: user.phorse - cost, totalPhorseSpent: user.totalPhorseSpent + cost },
           select: { phorse: true },
         }),
         tx.horse.update({
@@ -578,77 +565,6 @@ export class HorseService {
         newStatus: updatedHorse.status as 'IDLE' | 'SLEEP',
         userPhorse: updatedUser.phorse,
       };
-    });
-  }
-
-
-  /**
-  * Transfers one “faucet” horse (lowest tokenId) to the caller,
-  * but only if they have ≥1000 phorse.  
-  * Throttled elsewhere in the controller.
-  */
-  async claimHorse(callerWallet: string): Promise<{ claimedTokenId: string }> {
-    // 1) Run a transaction, so that balance‐deduction + horse‐reassign are atomic.
-    return await this.prisma.$transaction(async (tx) => {
-      // ────────────────────────────────────────────────────────────────
-      // 1) Make sure caller exists & get their user.id
-      const callerUser = await tx.user.findUnique({
-        where: { wallet: callerWallet }
-      });
-      if (!callerUser) {
-        throw new NotFoundException('Caller not found in users table');
-      }
-      const callerUserId = callerUser.id; // ↪ this is a UUID, not the wallet string
-
-      // 2) Check if they have ≥ 1000 phorse
-      if (callerUser.phorse < 1000) {
-        throw new BadRequestException('Insufficient PHORSE balance to claim a faucet horse');
-      }
-
-      // 3) Deduct 1000 phorse from the caller
-      await tx.user.update({
-        where: { id: callerUserId },
-        data: { phorse: { decrement: 1000 } }
-      });
-
-      // 4) Find the single faucet horse with smallest tokenId
-      //    We use a raw SQL query with lock to avoid race conditions.
-      //    Note: Prisma currently does not expose SELECT … FOR UPDATE easily,
-      //    so we do a raw query here. Make sure your schema name matches.
-      const rawResult: Array<{ tokenId: string }> = await tx.$queryRawUnsafe(`
-        SELECT "tokenId"
-        FROM "Horse"
-        WHERE "ownerId" = $1
-        ORDER BY ("tokenId")::int ASC
-        LIMIT 1
-        FOR UPDATE
-      `, this.FAUCET_OWNER_ID);
-
-      if (rawResult.length === 0) {
-        throw new NotFoundException('No faucet horses available to claim');
-      }
-
-      const toClaimTokenId = rawResult[0].tokenId;
-
-      // 5) Atomically reassign that one row, but only if it still belongs to FAUCET_OWNER_ID
-      const updatedCount = await tx.horse.updateMany({
-        where: {
-          tokenId: toClaimTokenId,
-          ownerId: this.FAUCET_OWNER_ID
-        },
-        data: {
-          ownerId: callerUserId // ← MUST be the UUID, not wallet string
-        },
-      });
-
-      // If updateMany affected 0 rows, someone else grabbed it concurrently
-      if (updatedCount.count !== 1) {
-        // Throw to roll back the entire transaction (including the 1000 deduction).
-        throw new NotFoundException('Failed to claim faucet horse (already claimed by someone else)');
-      }
-
-      // 6) Success: return the newly claimed tokenId
-      return { claimedTokenId: toClaimTokenId };
     });
   }
 
@@ -988,4 +904,25 @@ export class HorseService {
 
     return { success: true };
   }
+
+  async getRaceHistoryByHorseId(horseId: string, userId: string) {
+    const horse = await this.prisma.horse.findFirst({
+      where: {
+        tokenId: horseId,
+        ownerId: userId,
+      },
+      include: {
+        raceHistory: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    if (!horse) {
+      throw new NotFoundException('Horse not found or unauthorized');
+    }
+
+    return horse.raceHistory;
+  }
+
 }

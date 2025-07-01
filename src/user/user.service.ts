@@ -1,14 +1,15 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { chests } from 'src/data/items';
-import { TransactionStatus, TransactionType, Request } from '@prisma/client';
+import { TransactionStatus, TransactionType, Request, IntentStage, PresaleIntent } from '@prisma/client';
 import { chestsPercentage, items } from '../data/items';
-import { getWithdrawTax } from './withdraw-tax';
+import { getWithdrawUserPct, withdrawTaxConfig } from './withdraw-tax';
 import { Throttle } from '@nestjs/throttler';
+import { HorseService } from 'src/horse/horse.service';
 
 @Injectable()
 export class UserService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(private readonly prisma: PrismaService, private readonly horseService: HorseService) { }
 
     /**
     * Finds a user by wallet address or creates one with phorse = 0.
@@ -78,6 +79,7 @@ export class UserService {
                 },
                 data: {
                     phorse: { decrement: totalCost },
+                    totalPhorseSpent: { increment: totalCost },
                 },
             });
             if (upd.count === 0) {
@@ -186,7 +188,10 @@ export class UserService {
                     }
                     await tx.user.update({
                         where: { id: user.id },
-                        data: { phorse: { increment: amount } },
+                        data: {
+                            phorse: { increment: amount },
+                            totalPhorseEarned: { increment: amount }
+                        },
                     });
                 } else {
                     // CREATE/UPDATE ITEM
@@ -303,7 +308,6 @@ export class UserService {
     * 4. Create the BridgeRequest pointing at that Transaction
     * 5. All in one Prisma TX ⇒ full rollback on any failure
     */
-    @Throttle({ default: { limit: 10, ttl: 30_000 } })
     async phorseWithdraw(ownerWallet: string, amount: number) {
         // 1) sanity‐check
         if (!Number.isFinite(amount) || amount <= 0) {
@@ -363,44 +367,108 @@ export class UserService {
     }
 
     async getWithdrawTax(wallet: string) {
+        // 1) Lookup user and their presale balance
         const user = await this.prisma.user.findUnique({
             where: { wallet },
-            select: { id: true },
+            select: {
+                id: true,
+                presalePhorse: true,
+            },
         });
         if (!user) {
             throw new NotFoundException('User not found');
         }
 
-        const lastWithdraw = await this.prisma.transaction.findFirst({
-            where: {
-                ownerId: user.id,
-                type: 'WITHDRAW',
-                status: 'COMPLETED',
-            },
-            orderBy: {
-                createdAt: 'desc',
-            },
-        });
-
-        if (!lastWithdraw) {
-            // No previous withdraw ⇒ highest tax bracket (100%)
+        // 2) If they still have presale tokens, always use the initial (day-0) rate
+        const hasPresale = user.presalePhorse > 0;
+        if (hasPresale) {
+            const userPct = withdrawTaxConfig.initialUserPct;   // e.g. 50
             return {
-                userPct: 100,
-                taxPct: 0,
-                hoursSinceLast: null,
+                userPct,
+                taxPct: 100 - userPct,
+                hoursSinceLast: null,   // or 0, up to you
             };
         }
 
-        const diffMs = Date.now() - lastWithdraw.createdAt.getTime();
-        const diffHours = diffMs / 1000 / 60 / 60;
+        // 3) Otherwise fallback to your regressive‐tax logic
+        const last = await this.prisma.transaction.findFirst({
+            where: {
+                ownerId: user.id,
+                type: TransactionType.WITHDRAW,
+                status: TransactionStatus.COMPLETED,
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { createdAt: true },
+        });
 
-        const bracket = getWithdrawTax(diffHours);
+        const hoursSince = last
+            ? (Date.now() - last.createdAt.getTime()) / (1000 * 60 * 60)
+            : 0;
 
+        const userPct = getWithdrawUserPct(hoursSince, withdrawTaxConfig);
         return {
-            userPct: bracket.userPct,
-            taxPct: 100 - bracket.userPct,
-            hoursSinceLast: diffHours,
+            userPct,
+            taxPct: 100 - userPct,
+            hoursSinceLast: last ? hoursSince : null,
         };
     }
 
+    /**
+    * 1) Validate `amount` is integer in [1000..30000]
+    * 2) Fetch all on-chain horses for that wallet
+    * 3) Create a PresaleIntent (status=STARTED, amount)
+    * 4) Attach each horse to that intent (intentId)
+    */
+    async createPresaleIntent(ownerWallet: string, amount: number) {
+        // 1) Basic validation
+        if (!Number.isInteger(amount) || amount < 1000 || amount > 30000) {
+            throw new BadRequestException(
+                'Amount must be an integer between 1000 and 30000'
+            );
+        }
+
+        // 2) Fetch on-chain horses
+        const horses = await this.horseService.listBlockchainHorses(ownerWallet);
+        const horseCount = horses.length;
+        const maxAllowed = horseCount * 1000;
+        if (amount > maxAllowed) {
+            throw new BadRequestException(
+                `Presale amount cannot exceed ${maxAllowed} PHORSE ` +
+                `(1000 per horse; you have ${horseCount} horse${horseCount !== 1 ? 's' : ''})`
+            );
+        }
+
+        // 3) **New check**: make sure none of these horses have already been
+        //    used in a presaleIntent whose status is beyond STARTED
+        const locked = await this.prisma.horse.findMany({
+            where: {
+                id: { in: horses.map(h => h.id) },
+                presaleIntent: {
+                    isNot: null,
+                    // is: { status: { not: IntentStage.STARTED } }
+                }
+            },
+            select: { tokenId: true },
+        });
+        if (locked.length) {
+            const ids = locked.map(h => h.tokenId).join(', ');
+            throw new BadRequestException(
+                `A presale purchase intent has already been registered for horses [${ids}]`
+            );
+        }
+
+        // 4) Create the intent & link all horses
+        const intent = await this.prisma.presaleIntent.create({
+            data: {
+                amount,
+                status: IntentStage.STARTED,
+                wallet: ownerWallet,
+                vouchedHorses: {
+                    connect: horses.map(h => ({ id: h.id })),
+                },
+            },
+        });
+
+        return intent;
+    }
 }

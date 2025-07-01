@@ -17,17 +17,15 @@ interface ConsumeDto {
 export class HorseController {
   constructor(private readonly horseService: HorseService, private readonly energyRecoveryService: EnergyRecoveryService) { }
 
-  /** GET /horses → [{ id, tokenId, name, … }] */
-  @Get()
-  async listHorses(@Request() req) {
-    // req.user.wallet is set by JwtStrategy.validate()
-    return this.horseService.listHorses(req.user.wallet);
-  }
-
   @Get('blockchain')
   async listBlockchainHorses(@Request() req) {
     // req.user.wallet is set by JwtStrategy.validate()
     return this.horseService.listBlockchainHorses(req.user.wallet);
+  }
+
+  @Get(':id/races')
+  async getHorseRaceHistory(@Param('id') horseId: string, @Request() req) {
+    return this.horseService.getRaceHistoryByHorseId(horseId, req.user.id);
   }
 
   /**
@@ -72,26 +70,6 @@ export class HorseController {
     return this.horseService.restoreHorse(ownerWallet, tokenId);
   }
 
-  /**
-   * PUT /horses/claim-horse  
-   *    - Only in development/beta builds (DevOnlyGuard).  
-   *    - Throttled to 50 calls per minute.
-   */
-  /* @Put('claim-horse')
-  @Throttle({ default: { limit: 500, ttl: 30_000 } })
-  async claimHorse(@Request() req) {
-    // req.user is populated by your JWT/SIWE guard; assume it has `.wallet`
-    const ownerWallet = req.user.wallet as string;
-    if (!ownerWallet) {
-      throw new BadGatewayException('No authenticated wallet found.');
-    }
-    return this.horseService.claimHorse(ownerWallet);
-  } */
-
-  /**
-  * PUT /horses/:tokenId/equip-item
-  *  Body: { name: string, usesLeft: number }
-  */
   @UseGuards(IsOwnerGuard)
   @Put(':tokenId/equip-item')
   @UseGuards(JwtAuthGuard)

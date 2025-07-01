@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common'
+import { forwardRef, Module } from '@nestjs/common'
 import { JwtModule } from '@nestjs/jwt'
 import {
   ConfigModule,
@@ -14,7 +14,7 @@ import { JwtAuthGuard } from './jwt-auth.guard'
 
 @Module({
   imports: [
-    UserModule,
+    forwardRef(() => UserModule),
     PrismaModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     ConfigModule,               // for ConfigService
