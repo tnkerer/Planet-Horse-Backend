@@ -104,14 +104,4 @@ export class UserController {
   async checkWithdrawTax(@Request() req) {
     return this.users.getWithdrawTax(req.user.wallet);
   }
-
-  @Post('presale-intent')
-  async createPresaleIntent(
-    @Request() req,
-    @Body() dto: CreatePresaleIntentDto
-  ) {
-    // normalize to lowercase
-    return this.users.createPresaleIntent(req.user.wallet, dto.amount);
-  }
-
 }

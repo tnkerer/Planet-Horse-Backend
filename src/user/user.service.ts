@@ -80,6 +80,7 @@ export class UserService {
                 data: {
                     phorse: { decrement: totalCost },
                     totalPhorseSpent: { increment: totalCost },
+                    presalePhorse: { decrement: totalCost }
                 },
             });
             if (upd.count === 0) {

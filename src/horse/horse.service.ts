@@ -147,7 +147,7 @@ export class HorseService {
       // 1) Lookup user & their phorse/medals balance
       const user = await tx.user.findUnique({
         where: { wallet: ownerWallet },
-        select: { id: true, phorse: true, medals: true, totalPhorseSpent: true },
+        select: { id: true, phorse: true, medals: true, totalPhorseSpent: true, presalePhorse: true },
       });
       if (!user) throw new NotFoundException('User not found');
 
@@ -269,6 +269,8 @@ export class HorseService {
         }
       }
 
+      const newPresale = Math.max(user.presalePhorse - phorseCost, 0);
+
       // 9) Perform the combined updates in one operation
       //   → Update user balances and horse stats atomically
       const [updatedUser, updatedHorse] = await Promise.all([
@@ -277,6 +279,7 @@ export class HorseService {
           data: {
             phorse: user.phorse - phorseCost,
             totalPhorseSpent: user.totalPhorseSpent + phorseCost,
+            presalePhorse: newPresale,
             medals: user.medals - medalCost,
           },
           select: { phorse: true, medals: true },
@@ -503,7 +506,7 @@ export class HorseService {
       // 1) Find user
       const user = await tx.user.findUnique({
         where: { wallet: ownerWallet },
-        select: { id: true, phorse: true, totalPhorseSpent: true },
+        select: { id: true, phorse: true, totalPhorseSpent: true, presalePhorse: true },
       });
       if (!user) {
         throw new NotFoundException('User not found');
@@ -546,11 +549,13 @@ export class HorseService {
       const newStatus =
         horse.currentEnergy >= energySpent ? 'IDLE' : 'SLEEP';
 
+      const newPresale = Math.max(user.presalePhorse - cost, 0);
+
       // 6) Perform updates in transaction
       const [updatedUser, updatedHorse] = await Promise.all([
         tx.user.update({
           where: { id: user.id },
-          data: { phorse: user.phorse - cost, totalPhorseSpent: user.totalPhorseSpent + cost },
+          data: { phorse: user.phorse - cost, totalPhorseSpent: user.totalPhorseSpent + cost, presalePhorse: newPresale },
           select: { phorse: true },
         }),
         tx.horse.update({
