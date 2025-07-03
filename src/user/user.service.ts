@@ -368,30 +368,19 @@ export class UserService {
     }
 
     async getWithdrawTax(wallet: string) {
-        // 1) Lookup user and their presale balance
         const user = await this.prisma.user.findUnique({
             where: { wallet },
-            select: {
-                id: true,
-                presalePhorse: true,
-            },
+            select: { id: true, lastRace: true, presalePhorse: true },
         });
-        if (!user) {
-            throw new NotFoundException('User not found');
+        if (!user) throw new NotFoundException('User not found');
+
+        // ① presale override
+        if ((user.presalePhorse ?? 0) > 0) {
+            const userPct = withdrawTaxConfig.initialUserPct;
+            return { userPct, taxPct: 100 - userPct, hoursSinceLast: null };
         }
 
-        // 2) If they still have presale tokens, always use the initial (day-0) rate
-        const hasPresale = user.presalePhorse > 0;
-        if (hasPresale) {
-            const userPct = withdrawTaxConfig.initialUserPct;   // e.g. 50
-            return {
-                userPct,
-                taxPct: 100 - userPct,
-                hoursSinceLast: null,   // or 0, up to you
-            };
-        }
-
-        // 3) Otherwise fallback to your regressive‐tax logic
+        // ② fetch last withdraw
         const last = await this.prisma.transaction.findFirst({
             where: {
                 ownerId: user.id,
@@ -402,15 +391,21 @@ export class UserService {
             select: { createdAt: true },
         });
 
-        const hoursSince = last
-            ? (Date.now() - last.createdAt.getTime()) / (1000 * 60 * 60)
-            : 0;
+        // ③ compute hoursSince, falling back to lastRace
+        let hoursSince: number;
+        if (last) {
+            hoursSince = (Date.now() - last.createdAt.getTime()) / 36e5;
+        } else if (user.lastRace) {
+            hoursSince = (Date.now() - user.lastRace.getTime()) / 36e5;
+        } else {
+            hoursSince = Infinity;
+        }
 
         const userPct = getWithdrawUserPct(hoursSince, withdrawTaxConfig);
         return {
             userPct,
             taxPct: 100 - userPct,
-            hoursSinceLast: last ? hoursSince : null,
+            hoursSinceLast: last ? hoursSince : (user.lastRace ? hoursSince : null),
         };
     }
 

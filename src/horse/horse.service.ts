@@ -342,7 +342,7 @@ export class HorseService {
     return this.prisma.$transaction(async (tx) => {
       const user = await tx.user.findUnique({
         where: { wallet: ownerWallet },
-        select: { id: true, phorse: true, medals: true, totalPhorseEarned: true },
+        select: { id: true, phorse: true, medals: true, totalPhorseEarned: true, lastRace: true },
       });
       if (!user) throw new NotFoundException('User not found');
 
@@ -447,7 +447,7 @@ export class HorseService {
       const [updatedUser, updatedHorse] = await Promise.all([
         tx.user.update({
           where: { id: user.id },
-          data: { phorse: updatedPhorse, medals: updatedMedals, totalPhorseEarned: updatedTotalPhorseEarned },
+          data: { phorse: updatedPhorse, medals: updatedMedals, totalPhorseEarned: updatedTotalPhorseEarned, ...(user.lastRace ? {} : { lastRace: new Date() })},
           select: { phorse: true, medals: true },
         }),
         tx.horse.updateMany({

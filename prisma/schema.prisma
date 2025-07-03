@@ -28,6 +28,7 @@ model User {
   totalPhorseEarned Float       @default(0)
   totalPhorseSpent  Float       @default(0)
   presalePhorse     Float       @default(0)
+  lastRace      DateTime?
 }
 
 model Nonce {
