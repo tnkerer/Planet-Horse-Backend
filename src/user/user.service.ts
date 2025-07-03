@@ -398,14 +398,14 @@ export class UserService {
         } else if (user.lastRace) {
             hoursSince = (Date.now() - user.lastRace.getTime()) / 36e5;
         } else {
-            hoursSince = Infinity;
+            hoursSince = 0;
         }
 
         const userPct = getWithdrawUserPct(hoursSince, withdrawTaxConfig);
         return {
             userPct,
             taxPct: 100 - userPct,
-            hoursSinceLast: last ? hoursSince : (user.lastRace ? hoursSince : null),
+            hoursSinceLast: last || user.lastRace ? hoursSince : null,
         };
     }
 
