@@ -60,7 +60,7 @@ export class AppModule implements NestModule {
         { path: 'auth/logout', method: RequestMethod.POST },
         { path: 'user/chests/buy', method: RequestMethod.POST },
         { path: 'user/chests/open', method: RequestMethod.POST },
-        { path: 'user/withdraw', method: RequestMethod.POST },
+        // { path: 'user/withdraw', method: RequestMethod.POST },
         { path: 'horses/*', method: RequestMethod.PUT },
       )
       .forRoutes('*')
