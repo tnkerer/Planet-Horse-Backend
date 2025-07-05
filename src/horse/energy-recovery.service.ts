@@ -16,7 +16,7 @@ export class EnergyRecoveryService {
     later.date.localTime();
 
     // Parse CRON string, support seconds (6-part format)
-    const schedule = later.parse.cron('0 0 */6 * * *', true); // true = includes seconds
+    const schedule = later.parse.cron('5 0 */6 * * *', true); // true = includes seconds
 
     // Get the next scheduled time
     const nextDate = later.schedule(schedule).next(1) as Date;
