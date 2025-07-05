@@ -94,10 +94,10 @@ export const chests = {
 
 export const chestsPercentage = {
     1: {
-        1 : "5000 phorse",
-        6 : "1250 phorse",
+        0.5 : "5000 phorse",
+        3 : "1250 phorse",
         13 : "Common Horseshoe" ,       
-        20 : "Superior XP Potion",
+        19 : "Superior XP Potion",
         30 : "Common XP Potion",
         40 : "Hay",
         60 : "250 phorse",

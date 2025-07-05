@@ -6,6 +6,7 @@ import { EnergyRecoveryService } from './energy-recovery.service';
 import { EquipItemDto } from './dto/equip-item.dto';
 import { UnequipItemDto } from './dto/unequip-item.dto';
 import { IsOwnerGuard } from 'src/guards/is-owner.guard';
+import { IsMultipleOwnerGuard } from 'src/guards/is-multiple-owner.guard';
 
 interface ConsumeDto {
   itemName: string;
@@ -57,6 +58,17 @@ export class HorseController {
     return this.horseService.startRace(ownerWallet, tokenId);
   }
 
+  @UseGuards(IsMultipleOwnerGuard)
+  @Put('start-multiple-race')
+  @Throttle({ default: { limit: 250, ttl: 30_000 } })
+  async startMultipleRace(
+    @Request() req,
+    @Body('tokenIds') tokenIds: string[],
+  ) {
+    const ownerWallet = req.user.wallet as string;
+    return this.horseService.startMultipleRace(ownerWallet, tokenIds);
+  }
+
   /**
   * PUT /horses/:tokenId/restore
   *   - Must be authenticated
@@ -103,6 +115,8 @@ export class HorseController {
     }
     return this.horseService.unequipItem(wallet, tokenId, dto);
   }
+
+
 
   @UseGuards(JwtAuthGuard)
   @Put(':tokenId/consume')

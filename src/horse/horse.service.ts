@@ -447,7 +447,7 @@ export class HorseService {
       const [updatedUser, updatedHorse] = await Promise.all([
         tx.user.update({
           where: { id: user.id },
-          data: { phorse: updatedPhorse, medals: updatedMedals, totalPhorseEarned: updatedTotalPhorseEarned, ...(user.lastRace ? {} : { lastRace: new Date() })},
+          data: { phorse: updatedPhorse, medals: updatedMedals, totalPhorseEarned: updatedTotalPhorseEarned, ...(user.lastRace ? {} : { lastRace: new Date() }) },
           select: { phorse: true, medals: true },
         }),
         tx.horse.updateMany({
@@ -488,6 +488,206 @@ export class HorseService {
         position,
         finalStatus,
       };
+    });
+  }
+
+  /**
+   * startMultipleRace:
+   *  - Runs race logic for multiple tokenIds in one transaction.
+   */
+  async startMultipleRace(
+    ownerWallet: string,
+    tokenIds: string[],
+  ): Promise<Array<{
+    tokenId: string;
+    xpReward: number;
+    tokenReward: number;
+    medalReward: number;
+    position: number;
+    finalStatus: 'IDLE' | 'SLEEP' | 'BRUISED';
+  }>> {
+    return this.prisma.$transaction(async (tx) => {
+      // 1) Load user once
+      const user = await tx.user.findUnique({
+        where: { wallet: ownerWallet },
+        select: {
+          id: true,
+          phorse: true,
+          medals: true,
+          totalPhorseEarned: true,
+          lastRace: true,
+        },
+      });
+      if (!user) throw new NotFoundException('User not found');
+
+      if (user.phorse < tokenIds.length * 50) throw new BadRequestException('Not enough PHORSE to pay for race all');
+
+      // 2) Load all horses + equipments
+      const horses = await tx.horse.findMany({
+        where: { tokenId: { in: tokenIds } },
+        include: { equipments: true },
+      });
+      if (horses.length !== tokenIds.length) {
+        throw new NotFoundException('One or more horses not found');
+      }
+
+      // 3) Per-horse computation
+      type Result = {
+        tokenId: string;
+        xpReward: number;
+        tokenReward: number;
+        medalReward: number;
+        position: number;
+        finalStatus: 'IDLE' | 'SLEEP' | 'BRUISED';
+        newEnergy: number;
+        updatedExp: number;
+        upgradable: boolean;
+      };
+      const results: Result[] = [];
+
+      for (const horse of horses) {
+        if (horse.ownerId !== user.id) {
+          throw new ForbiddenException(`Not your horse ${horse.tokenId}`);
+        }
+        if (horse.status !== 'IDLE') {
+          throw new BadRequestException(`Horse ${horse.tokenId} must be IDLE`);
+        }
+
+        // a) energy cost & modifiers
+        const baseEnergy = globals['Energy Spent'] as number;
+        const mods = horse.equipments
+          .map(i => itemModifiers[i.name])
+          .filter(Boolean)
+          .reduce((acc, m) => ({
+            positionBoost: acc.positionBoost * m.positionBoost,
+            hurtRate:      acc.hurtRate      * m.hurtRate,
+            xpMultiplier:  acc.xpMultiplier  * m.xpMultiplier,
+            energySaved:   acc.energySaved   + m.energySaved,
+          }), { positionBoost: 1, hurtRate: 1, xpMultiplier: 1, energySaved: 0 });
+
+        const energySpent = Math.max(1, baseEnergy - mods.energySaved);
+        if (horse.currentEnergy < energySpent) {
+          throw new BadRequestException(
+            `Not enough energy on ${horse.tokenId}: need ${energySpent}, have ${horse.currentEnergy}`
+          );
+        }
+
+        // b) determine position & rewards
+        const totalStats  = horse.currentPower + horse.currentSprint + horse.currentSpeed;
+        const baseMod     = totalStats / (globals['Base Denominator'] as number);
+        const roll        = Math.min(100, Math.random() * 100 * mods.positionBoost);
+        const adjRoll     = roll + 1.5 * horse.level;
+        const winrates    = globals['Winrates'] as Record<string, number>;
+        const thresholds  = Object.keys(winrates).map(parseFloat).sort((a, b) => a - b);
+
+        let chosen = thresholds[0];
+        for (const t of thresholds) {
+          if (adjRoll >= t) chosen = t;
+          else break;
+        }
+        const position     = winrates[chosen.toString()];
+        const [xpBase, tokenBase] = (globals['Rewards'] as Record<string, readonly [number, number]>)[position.toString()];
+
+        const baseXp      = Math.floor(xpBase * baseMod * (globals['Experience Multiplier'] as number));
+        const xpReward    = Math.floor(baseXp * mods.xpMultiplier);
+        const tokenReward = parseFloat((tokenBase * baseMod).toFixed(2));
+        const medalReward = position <= 3 ? 1 : 0;
+
+        // c) post-race status (fixed hurt logic)
+        const newEnergy  = horse.currentEnergy - energySpent;
+        const denom      = Math.log(totalStats) / Math.log(1.6);
+        const hurtChance = Math.min(1, denom > 0 ? 1/denom : 0); // Math.min(1, denom > 0 ? 1 / denom : 0);
+        const isHurt     = Math.random() * mods.hurtRate < hurtChance;
+
+        let finalStatus: 'IDLE' | 'SLEEP' | 'BRUISED' = 'IDLE';
+        if (isHurt)                   finalStatus = 'BRUISED';
+        else if (newEnergy < baseEnergy) finalStatus = 'SLEEP';
+
+        // d) xp & upgradable flag
+        const updatedExp = horse.exp + xpReward;
+        const cap        = levelLimits[horse.rarity];
+        let upgradable   = false;
+        if (cap !== undefined && horse.level < cap) {
+          const nextXpReq = xpProgression[horse.level];
+          if (nextXpReq !== undefined && updatedExp >= nextXpReq) {
+            upgradable = true;
+          }
+        }
+
+        results.push({
+          tokenId:     horse.tokenId,
+          xpReward,
+          tokenReward,
+          medalReward,
+          position,
+          finalStatus,
+          newEnergy,
+          updatedExp,
+          upgradable,
+        });
+      }
+
+      // 4) Aggregate user totals
+      const totalToken = results.reduce((sum, r) => sum + r.tokenReward, 0);
+      const totalMedal = results.reduce((sum, r) => sum + r.medalReward, 0);
+
+      // 5) Prepare all item-uses
+      const itemOps = horses.flatMap(h =>
+        h.equipments
+         .filter(i => itemModifiers[i.name])
+         .map(i => {
+           const newUses = (i.uses ?? 0) - 1;
+           return newUses > 0
+             ? tx.item.update({ where: { id: i.id }, data: { uses: newUses } })
+             : tx.item.delete({ where: { id: i.id } });
+         })
+      );
+
+      // 6) Commit all writes in parallel
+      await Promise.all([
+        tx.user.update({
+          where: { id: user.id },
+          data: {
+            phorse:            user.phorse + totalToken - (tokenIds.length * 50),
+            medals:            user.medals + totalMedal,
+            totalPhorseEarned: user.totalPhorseEarned + totalToken,
+            ...(user.lastRace ? {} : { lastRace: new Date() }),
+          },
+        }),
+        Promise.all(results.map(r =>
+          tx.horse.update({
+            where: { tokenId: r.tokenId },
+            data: {
+              exp:           r.updatedExp,
+              currentEnergy: r.newEnergy,
+              status:        r.finalStatus,
+              upgradable:    r.upgradable,
+            },
+          })
+        )),
+        Promise.all(itemOps),
+        tx.raceHistory.createMany({
+          data: results.map(r => ({
+            horseId:      horses.find(h => h.tokenId === r.tokenId)!.id,
+            phorseEarned: r.tokenReward,
+            xpEarned:     r.xpReward,
+            position:     r.position,
+          })),
+        }),
+      ]);
+
+      // 7) Return in input order
+      return tokenIds.map(id => {
+        const r = results.find(x => x.tokenId === id)!;
+        return {
+          tokenId:     r.tokenId,
+          xpReward:    r.xpReward,
+          tokenReward: r.tokenReward,
+          medalReward: r.medalReward,
+          position:    r.position,
+          finalStatus: r.finalStatus,
+        };
+      });
     });
   }
 
