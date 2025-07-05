@@ -16,7 +16,7 @@ export class EnergyRecoveryService {
     later.date.localTime();
 
     // Parse CRON string, support seconds (6-part format)
-    const schedule = later.parse.cron('5 0 */6 * * *', true); // true = includes seconds
+    const schedule = later.parse.cron('0 40 */6 * * *', true); // true = includes seconds
 
     // Get the next scheduled time
     const nextDate = later.schedule(schedule).next(1) as Date;
@@ -41,7 +41,7 @@ export class EnergyRecoveryService {
     return `in ${result}`;
   }
   // We no longer need to page through batches; a single UPDATE suffices.
-  @Cron('5 0 */6 * * *')
+  @Cron('0 40 */6 * * *')
   public async handleEnergyRecovery(): Promise<void> {
     this.logger.debug('⏰ Starting 6-hour energy-recovery cron (SQL version)…');
 
@@ -72,7 +72,6 @@ export class EnergyRecoveryService {
         THEN 'IDLE'::"Status"
         ELSE 'SLEEP'::"Status"
       END
-    "lastEnergy" = NOW()
   WHERE
     "status" IN ( 'IDLE', 'SLEEP' )
     AND "currentEnergy" < "maxEnergy";
