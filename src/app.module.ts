@@ -57,10 +57,12 @@ export class AppModule implements NestModule {
         // skip CSRF for your SIWE endpoints
         { path: 'auth/nonce', method: RequestMethod.GET },
         { path: 'auth/verify', method: RequestMethod.POST },
+        { path: 'auth/discord-token', method: RequestMethod.POST },
         { path: 'auth/logout', method: RequestMethod.POST },
         { path: 'user/chests/buy', method: RequestMethod.POST },
         { path: 'user/chests/open', method: RequestMethod.POST },
         { path: 'user/withdraw', method: RequestMethod.POST },
+        { path: 'user/link-discord', method: RequestMethod.POST },
         { path: 'horses/*', method: RequestMethod.PUT },
       )
       .forRoutes('*')

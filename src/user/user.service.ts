@@ -467,4 +467,28 @@ export class UserService {
 
         return intent;
     }
+
+    async linkDiscord(wallet: string, discordId: string, discordTag: string) {
+        return this.prisma.user.update({
+            where: { wallet: wallet },
+            data: {
+                discordId,
+                discordTag,
+            },
+        });
+    }
+
+    async getUserDiscord(wallet: string) {
+        const user = await this.prisma.user.findUnique({
+            where: { wallet: wallet },
+            select: {
+                discordId: true,
+                discordTag: true,
+            },
+        });
+
+        if (!user) throw new NotFoundException('User not found');
+        return user;
+    }
+
 }

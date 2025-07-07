@@ -29,6 +29,9 @@ model User {
   totalPhorseSpent  Float       @default(0)
   presalePhorse     Float       @default(0)
   lastRace      DateTime?
+    // Discord linking
+  discordId    String?  @unique
+  discordTag   String?
 }
 
 model Nonce {

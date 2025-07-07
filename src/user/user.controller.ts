@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Request, NotFoundException, Post, Body, BadRequestException } from '@nestjs/common';
+import { Controller, Get, UseGuards, Request, NotFoundException, Post, Body, BadRequestException, Param } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UserService } from './user.service';
 import { WithdrawDto } from './dto/withdraw.dto';
@@ -103,5 +103,18 @@ export class UserController {
   @Get('withdraw-tax')
   async checkWithdrawTax(@Request() req) {
     return this.users.getWithdrawTax(req.user.wallet);
+  }
+
+  @Post('link-discord')
+  async linkDiscord(
+    @Request() req,
+    @Body() body: { discordId: string; discordTag: string }
+  ) {
+    return this.users.linkDiscord(req.user.wallet, body.discordId, body.discordTag);
+  }
+
+  @Get('get-discord')
+  async getDiscord(@Request() req) {
+    return this.users.getUserDiscord(req.user.wallet);
   }
 }
