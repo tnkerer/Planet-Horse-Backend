@@ -433,6 +433,7 @@ export class HorseService {
       // Decrement uses and delete items that reach 0
       const itemUpdates = horse.equipments.map((item) => {
         if (!itemModifiers[item.name]) return null;
+        if (!item.breakable) return null;
         const newUses = (item.uses ?? 0) - 1;
         return newUses > 0
           ? tx.item.update({

@@ -194,6 +194,19 @@ export class UserService {
                             totalPhorseEarned: { increment: amount }
                         },
                     });
+                } else if (name.toLowerCase().endsWith('medals')) {
+                    // << NEW: Medals credit logic >>
+                    // e.g. "250 medals" → 250
+                    const amount = parseInt(name, 10);
+                    if (Number.isNaN(amount)) {
+                        throw new Error(`Bad medals drop "${name}"`);
+                    }
+                    await tx.user.update({
+                        where: { id: user.id },
+                        data: {
+                            medals: { increment: amount }
+                        },
+                    });
                 } else {
                     // CREATE/UPDATE ITEM
                     const def = (items as Record<string, any>)[name];
