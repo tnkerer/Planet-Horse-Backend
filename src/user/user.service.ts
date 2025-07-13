@@ -241,6 +241,96 @@ export class UserService {
     }
 
     /**
+    * Recycle one item instance matching the given name & remaining uses,
+    * and roll for scrap.
+    *
+    * @param ownerWallet the user's wallet address
+    * @param itemName    the exact name of the item to recycle
+    * @param uses        the exact remaining-uses value on that item instance
+    * @returns           the scrap you received ("Scrap Metal"|"Scrap Leather"), or null if nothing
+    */
+    async recyle(
+        ownerWallet: string,
+        itemName: string,
+        uses: number
+    ): Promise<string | null> {
+        return this.prisma.$transaction(async tx => {
+            // 1) find the user
+            const user = await tx.user.findUnique({
+                where: { wallet: ownerWallet },
+                select: { id: true },
+            });
+            if (!user) throw new NotFoundException('User not found');
+
+            // 2) verify the item exists in our master list
+            const def = (items as Record<string, any>)[itemName];
+            if (!def) {
+                throw new NotFoundException(`Item "${itemName}" does not exist`);
+            }
+
+            // 3) check the user has at least one matching instance
+            const own = await tx.item.findFirst({
+                where: {
+                    ownerId: user.id,
+                    name: itemName,
+                    uses: uses,
+                    horseId: null,
+                },
+                orderBy: { createdAt: 'asc' },
+            });
+            if (!own) {
+                throw new BadRequestException(
+                    `You don't have any "${itemName}" with ${uses} uses`
+                );
+            }
+
+            // 4) delete that instance (fully recycled)
+            await tx.item.delete({ where: { id: own.id } });
+
+            // 5) roll for scrap
+            const roll = Math.random() * 100;
+            let reward: string | null = null;
+            if (roll < 10 || roll >= 90) {
+                reward = null; // 10% nothing + top 10%
+            } else if (roll < 50) {
+                reward = 'Scrap Metal';
+            } else {
+                reward = 'Scrap Leather';
+            }
+
+            // 6) credit scrap if any
+            if (reward) {
+                const scrapDef = items[reward];
+                await tx.item.create({
+                    data: {
+                        owner: { connect: { id: user.id } },
+                        name: reward,
+                        value: 1,
+                        breakable: scrapDef.breakable,
+                        uses: scrapDef.uses,
+                    },
+                });
+            }
+
+            // 7) log the ITEM transaction
+            await tx.transaction.create({
+                data: {
+                    owner: { connect: { id: user.id } },
+                    type: TransactionType.ITEM,
+                    status: TransactionStatus.COMPLETED,
+                    value: 0,
+                    note: reward
+                        ? `Recycled "${itemName}" (uses=${uses}), got ${reward}`
+                        : `Recycled "${itemName}" (uses=${uses}), got nothing`,
+                },
+            });
+
+            return reward;
+        });
+    }
+
+
+    /**
     * List all chests for a given user.
     */
     async listChests(ownerWallet: string) {

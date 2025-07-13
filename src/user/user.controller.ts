@@ -4,6 +4,7 @@ import { UserService } from './user.service';
 import { WithdrawDto } from './dto/withdraw.dto';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { CreatePresaleIntentDto } from './dto/create-presale-intent.dto';
+import { RecycleDto } from './dto/recycle.dto';
 
 @Controller('user')
 @UseGuards(JwtAuthGuard, ThrottlerGuard)
@@ -59,6 +60,25 @@ export class UserController {
   @Get('chests')
   async listChests(@Request() req) {
     return this.users.listChests(req.user.wallet);
+  }
+
+  /**
+  * POST /user/items/recycle
+  * Body: { name: string; uses: number }
+  * Returns: { reward: string | null }
+  */
+  @Post('items/recycle')
+  async recyle(
+    @Request() req,
+    @Body() dto: RecycleDto
+  ): Promise<{ reward: string | null }> {
+    // dto.name is guaranteed to be string and dto.uses ≥ 1 by class-validator
+    const reward = await this.users.recyle(
+      req.user.wallet,
+      dto.name,
+      dto.uses
+    );
+    return { reward };
   }
 
 

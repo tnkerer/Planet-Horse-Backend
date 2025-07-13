@@ -561,9 +561,9 @@ export class HorseService {
           .filter(Boolean)
           .reduce((acc, m) => ({
             positionBoost: acc.positionBoost * m.positionBoost,
-            hurtRate:      acc.hurtRate      * m.hurtRate,
-            xpMultiplier:  acc.xpMultiplier  * m.xpMultiplier,
-            energySaved:   acc.energySaved   + m.energySaved,
+            hurtRate: acc.hurtRate * m.hurtRate,
+            xpMultiplier: acc.xpMultiplier * m.xpMultiplier,
+            energySaved: acc.energySaved + m.energySaved,
           }), { positionBoost: 1, hurtRate: 1, xpMultiplier: 1, energySaved: 0 });
 
         const energySpent = Math.max(1, baseEnergy - mods.energySaved);
@@ -574,40 +574,40 @@ export class HorseService {
         }
 
         // b) determine position & rewards
-        const totalStats  = horse.currentPower + horse.currentSprint + horse.currentSpeed;
-        const baseMod     = totalStats / (globals['Base Denominator'] as number);
-        const roll        = Math.min(100, Math.random() * 100 * mods.positionBoost);
-        const adjRoll     = roll + 1.5 * horse.level;
-        const winrates    = globals['Winrates'] as Record<string, number>;
-        const thresholds  = Object.keys(winrates).map(parseFloat).sort((a, b) => a - b);
+        const totalStats = horse.currentPower + horse.currentSprint + horse.currentSpeed;
+        const baseMod = totalStats / (globals['Base Denominator'] as number);
+        const roll = Math.min(100, Math.random() * 100 * mods.positionBoost);
+        const adjRoll = roll + 1.5 * horse.level;
+        const winrates = globals['Winrates'] as Record<string, number>;
+        const thresholds = Object.keys(winrates).map(parseFloat).sort((a, b) => a - b);
 
         let chosen = thresholds[0];
         for (const t of thresholds) {
           if (adjRoll >= t) chosen = t;
           else break;
         }
-        const position     = winrates[chosen.toString()];
+        const position = winrates[chosen.toString()];
         const [xpBase, tokenBase] = (globals['Rewards'] as Record<string, readonly [number, number]>)[position.toString()];
 
-        const baseXp      = Math.floor(xpBase * baseMod * (globals['Experience Multiplier'] as number));
-        const xpReward    = Math.floor(baseXp * mods.xpMultiplier);
+        const baseXp = Math.floor(xpBase * baseMod * (globals['Experience Multiplier'] as number));
+        const xpReward = Math.floor(baseXp * mods.xpMultiplier);
         const tokenReward = parseFloat((tokenBase * baseMod).toFixed(2));
         const medalReward = position <= 3 ? 1 : 0;
 
         // c) post-race status (fixed hurt logic)
-        const newEnergy  = horse.currentEnergy - energySpent;
-        const denom      = Math.log(totalStats) / Math.log(1.6);
-        const hurtChance = Math.min(1, denom > 0 ? 1/denom : 0); // Math.min(1, denom > 0 ? 1 / denom : 0);
-        const isHurt     = Math.random() * mods.hurtRate < hurtChance;
+        const newEnergy = horse.currentEnergy - energySpent;
+        const denom = Math.log(totalStats) / Math.log(1.6);
+        const hurtChance = Math.min(1, denom > 0 ? 1 / denom : 0); // Math.min(1, denom > 0 ? 1 / denom : 0);
+        const isHurt = Math.random() * mods.hurtRate < hurtChance;
 
         let finalStatus: 'IDLE' | 'SLEEP' | 'BRUISED' = 'IDLE';
-        if (isHurt)                   finalStatus = 'BRUISED';
+        if (isHurt) finalStatus = 'BRUISED';
         else if (newEnergy < baseEnergy) finalStatus = 'SLEEP';
 
         // d) xp & upgradable flag
         const updatedExp = horse.exp + xpReward;
-        const cap        = levelLimits[horse.rarity];
-        let upgradable   = false;
+        const cap = levelLimits[horse.rarity];
+        let upgradable = false;
         if (cap !== undefined && horse.level < cap) {
           const nextXpReq = xpProgression[horse.level];
           if (nextXpReq !== undefined && updatedExp >= nextXpReq) {
@@ -616,7 +616,7 @@ export class HorseService {
         }
 
         results.push({
-          tokenId:     horse.tokenId,
+          tokenId: horse.tokenId,
           xpReward,
           tokenReward,
           medalReward,
@@ -635,13 +635,13 @@ export class HorseService {
       // 5) Prepare all item-uses
       const itemOps = horses.flatMap(h =>
         h.equipments
-         .filter(i => itemModifiers[i.name])
-         .map(i => {
-           const newUses = (i.uses ?? 0) - 1;
-           return newUses > 0
-             ? tx.item.update({ where: { id: i.id }, data: { uses: newUses } })
-             : tx.item.delete({ where: { id: i.id } });
-         })
+          .filter(i => itemModifiers[i.name])
+          .map(i => {
+            const newUses = (i.uses ?? 0) - 1;
+            return newUses > 0
+              ? tx.item.update({ where: { id: i.id }, data: { uses: newUses } })
+              : tx.item.delete({ where: { id: i.id } });
+          })
       );
 
       // 6) Commit all writes in parallel
@@ -649,8 +649,8 @@ export class HorseService {
         tx.user.update({
           where: { id: user.id },
           data: {
-            phorse:            user.phorse + totalToken - (tokenIds.length * 50),
-            medals:            user.medals + totalMedal,
+            phorse: user.phorse + totalToken - (tokenIds.length * 50),
+            medals: user.medals + totalMedal,
             totalPhorseEarned: user.totalPhorseEarned + totalToken,
             ...(user.lastRace ? {} : { lastRace: new Date() }),
           },
@@ -659,20 +659,20 @@ export class HorseService {
           tx.horse.update({
             where: { tokenId: r.tokenId },
             data: {
-              exp:           r.updatedExp,
+              exp: r.updatedExp,
               currentEnergy: r.newEnergy,
-              status:        r.finalStatus,
-              upgradable:    r.upgradable,
+              status: r.finalStatus,
+              upgradable: r.upgradable,
             },
           })
         )),
         Promise.all(itemOps),
         tx.raceHistory.createMany({
           data: results.map(r => ({
-            horseId:      horses.find(h => h.tokenId === r.tokenId)!.id,
+            horseId: horses.find(h => h.tokenId === r.tokenId)!.id,
             phorseEarned: r.tokenReward,
-            xpEarned:     r.xpReward,
-            position:     r.position,
+            xpEarned: r.xpReward,
+            position: r.position,
           })),
         }),
       ]);
@@ -681,11 +681,11 @@ export class HorseService {
       return tokenIds.map(id => {
         const r = results.find(x => x.tokenId === id)!;
         return {
-          tokenId:     r.tokenId,
-          xpReward:    r.xpReward,
+          tokenId: r.tokenId,
+          xpReward: r.xpReward,
           tokenReward: r.tokenReward,
           medalReward: r.medalReward,
-          position:    r.position,
+          position: r.position,
           finalStatus: r.finalStatus,
         };
       });
@@ -1081,7 +1081,7 @@ export class HorseService {
         ownerId: true,
         equipments: {
           where: { name: dto.name, horseId: { not: null } },
-          select: { id: true },
+          select: { id: true, updatedAt: true },
           orderBy: { createdAt: 'asc' },
           take: 1,
         },
@@ -1100,11 +1100,20 @@ export class HorseService {
         `Horse has no item named "${dto.name}" currently equipped!`,
       );
     }
-    const itemToUnequipId = horse.equipments[0].id;
+    const { id, updatedAt } = horse.equipments[0];
+
+    const SIX_HOURS = 6 * 60 * 60 * 1000;
+    if (updatedAt && Date.now() - updatedAt.getTime() < SIX_HOURS) {
+      const minsLeft = Math.ceil((SIX_HOURS - (Date.now() - updatedAt.getTime())) / 60000);
+      throw new BadRequestException(
+        `You can only unequip this item 6 hours after its last change. ` +
+        `Please wait another ${minsLeft} minute(s).`,
+      );
+    }
 
     // (4) Detach in one simple update:
     await this.prisma.item.update({
-      where: { id: itemToUnequipId },
+      where: { id: id },
       data: { horseId: null },
     });
 

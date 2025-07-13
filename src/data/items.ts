@@ -65,10 +65,24 @@ export const items = {
         "breakable": true,
         "consumable": false,
         "uses": 1
+    },
+    "Baby Ronke Trophy": {
+        "name": "Baby Ronke Trophy",
+        "src": "ronke",
+        "description": "Reduce race cost by 2 energy. A plush trophy to celebrate your victory!",
+        "breakable": false,
+        "consumable": false,
+        "uses": 1
     }
 }
 
 export const itemModifiers = {
+    "Baby Ronke Trophy" :{
+        positionBoost: 1,
+        hurtRate: 1,
+        xpMultiplier: 1,
+        energySaved: 2,       
+    },
     "Common Saddle": {
         positionBoost: 1,
         hurtRate: 1.25,
