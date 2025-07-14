@@ -1102,13 +1102,24 @@ export class HorseService {
     }
     const { id, updatedAt } = horse.equipments[0];
 
-    const SIX_HOURS = 6 * 60 * 60 * 1000;
-    if (updatedAt && Date.now() - updatedAt.getTime() < SIX_HOURS) {
-      const minsLeft = Math.ceil((SIX_HOURS - (Date.now() - updatedAt.getTime())) / 60000);
-      throw new BadRequestException(
-        `You can only unequip this item 6 hours after its last change. ` +
-        `Please wait another ${minsLeft} minute(s).`,
-      );
+    const thisItem = await this.prisma.item.findUnique({
+      where: { id: id },
+      select: { breakable: true }
+    })
+
+    if (!thisItem) {
+      throw new NotFoundException(`Cannot find target item`)
+    }
+
+    if (!thisItem.breakable) {
+      const SIX_HOURS = 6 * 60 * 60 * 1000;
+      if (updatedAt && Date.now() - updatedAt.getTime() < SIX_HOURS) {
+        const minsLeft = Math.ceil((SIX_HOURS - (Date.now() - updatedAt.getTime())) / 60000);
+        throw new BadRequestException(
+          `You can only unequip this item 6 hours after its last change. ` +
+          `Please wait another ${minsLeft} minute(s).`,
+        );
+      }
     }
 
     // (4) Detach in one simple update:
