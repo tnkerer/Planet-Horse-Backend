@@ -85,7 +85,7 @@ export const itemModifiers = {
     },
     "Common Saddle": {
         positionBoost: 1,
-        hurtRate: 1.25,
+        hurtRate: 1.30,
         xpMultiplier: 1,
         energySaved: 0,
     },
