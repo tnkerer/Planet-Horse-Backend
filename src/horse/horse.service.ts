@@ -378,7 +378,11 @@ export class HorseService {
         throw new BadRequestException(`Not enough energy: need ${energySpent}, have ${horse.currentEnergy}`);
       }
 
-      const totalStats = horse.currentPower + horse.currentSprint + horse.currentSpeed;
+      const extraSpd = equippedModifiers.reduce((sum, mod) => sum + (mod.extraSpd || 0), 0);
+      const extraSpt = equippedModifiers.reduce((sum, mod) => sum + (mod.extraSpt || 0), 0);
+      const extraPwr = equippedModifiers.reduce((sum, mod) => sum + (mod.extraPwr || 0), 0);
+
+      const totalStats = horse.currentPower + extraPwr + horse.currentSprint + extraSpt + horse.currentSpeed + extraSpd;
       const baseMod = totalStats / (globals['Base Denominator'] as number);
 
       const roll = Math.min(100, Math.random() * 100 * totalModifier.positionBoost);
@@ -574,7 +578,11 @@ export class HorseService {
         }
 
         // b) determine position & rewards
-        const totalStats = horse.currentPower + horse.currentSprint + horse.currentSpeed;
+        const extraSpd = horse.equipments.reduce((sum, i) => sum + (itemModifiers[i.name]?.extraSpd || 0), 0);
+        const extraSpt = horse.equipments.reduce((sum, i) => sum + (itemModifiers[i.name]?.extraSpt || 0), 0);
+        const extraPwr = horse.equipments.reduce((sum, i) => sum + (itemModifiers[i.name]?.extraPwr || 0), 0);
+
+        const totalStats = horse.currentPower + extraPwr + horse.currentSprint + extraSpt + horse.currentSpeed + extraSpd;
         const baseMod = totalStats / (globals['Base Denominator'] as number);
         const roll = Math.min(100, Math.random() * 100 * mods.positionBoost);
         const adjRoll = roll + 1.5 * horse.level;
@@ -722,6 +730,7 @@ export class HorseService {
           status: true,
           level: true,
           currentEnergy: true,
+          rarity: true
         },
       });
       if (!horse) {
@@ -738,7 +747,10 @@ export class HorseService {
 
       // 4) Compute cost
       // cost = (level - 1) * 100 PHORSE
-      const cost = (horse.level - 1) * globals["Recovery Cost"];
+      // const cost = (horse.level - 1) * globals["Recovery Cost"];
+      const baseModifier = globals["Rarity Modifier"][horse.rarity] * (300 / (globals["Base Denominator"]));
+      const cost = baseModifier * horse.level;
+
       if (user.phorse < cost) {
         throw new BadRequestException(
           `Not enough PHORSE to restore. Cost = ${cost}, you have ${user.phorse}`,

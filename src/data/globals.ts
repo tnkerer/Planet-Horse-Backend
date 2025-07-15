@@ -1,5 +1,5 @@
 export const globals = {
-  "Base Denominator": 12,
+  "Base Denominator": 18,
   "Quarter-Horse Racing Index": 1,
   "Flat Racing Index": 1,
   "Draft Horse Pulling Index": 1,
@@ -31,5 +31,13 @@ export const globals = {
   "Energy Recovery Rate": 12,
   "Energy Recovery Interval": 14400, 
   "Experience Multiplier": 1,
-  "Recovery Cost" : 125
+  "Recovery Cost" : 125,
+  "Rarity Modifier" : {
+    "Common" : 1,
+    "Uncommon" : 2,
+    "Rare" : 3,
+    "Epic" : 4,
+    "Legendary" : 5,
+    "Mythic" : 6
+  }
 } as const;
