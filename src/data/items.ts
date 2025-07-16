@@ -221,9 +221,9 @@ export const chestsPercentage = {
     2: {
         0.3: "60 medals",
         0.6: "6000 phorse",
-        6.2: "20 medals",
-        13.2: "10 medals",
-        25: "Champion Stirrups",
+        4.2: "20 medals",
+        9.2: "10 medals",
+        23: "Champion Stirrups",
         37: "Champion Bridle",
         49: "Champion Saddle Pad",
         52: "Big Hay Bale",

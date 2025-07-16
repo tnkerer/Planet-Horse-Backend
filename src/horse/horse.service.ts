@@ -748,7 +748,7 @@ export class HorseService {
       // 4) Compute cost
       // cost = (level - 1) * 100 PHORSE
       // const cost = (horse.level - 1) * globals["Recovery Cost"];
-      const baseModifier = globals["Rarity Modifier"][horse.rarity] * (300 / (globals["Base Denominator"]));
+      const baseModifier = globals["Rarity Modifier"][horse.rarity] * (260 / (globals["Base Denominator"]));
       const cost = baseModifier * horse.level;
 
       if (user.phorse < cost) {
