@@ -643,7 +643,7 @@ export class HorseService {
       // 5) Prepare all item-uses
       const itemOps = horses.flatMap(h =>
         h.equipments
-          .filter(i => itemModifiers[i.name])
+          .filter(i => itemModifiers[i.name] && i.breakable)
           .map(i => {
             const newUses = (i.uses ?? 0) - 1;
             return newUses > 0
