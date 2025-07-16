@@ -34,10 +34,10 @@ export const globals = {
   "Recovery Cost" : 125,
   "Rarity Modifier" : {
     "Common" : 1,
-    "Uncommon" : 2,
-    "Rare" : 3,
-    "Epic" : 4,
-    "Legendary" : 5,
-    "Mythic" : 6
+    "Uncommon" : 1.6,
+    "Rare" : 2.4,
+    "Epic" : 3.2,
+    "Legendary" : 4,
+    "Mythic" : 4.8
   }
 } as const;
