@@ -4,8 +4,8 @@ import { chests } from 'src/data/items';
 import { TransactionStatus, TransactionType, Request, IntentStage, PresaleIntent } from '@prisma/client';
 import { chestsPercentage, items } from '../data/items';
 import { getWithdrawUserPct, withdrawTaxConfig } from './withdraw-tax';
-import { Throttle } from '@nestjs/throttler';
 import { HorseService } from 'src/horse/horse.service';
+import { itemUpgradeCost, successRate } from 'src/data/item_progression';
 
 @Injectable()
 export class UserService {
@@ -29,6 +29,8 @@ export class UserService {
         });
     }
 
+    // ----------------------- BALANCE SECTION ------------------------
+
     async getBalance(wallet: string) {
         const u = await this.prisma.user.findUnique({
             where: { wallet },
@@ -44,6 +46,8 @@ export class UserService {
         });
         return u?.medals;
     }
+
+    // ------------------- ITEMS SECTION -----------------------
 
     /**
     * Buy a given chest type/quantity for a user identified by wallet.
@@ -329,6 +333,142 @@ export class UserService {
         });
     }
 
+    async upgradeItem(ownerWallet: string, itemName: string) {
+        const bases = ['Champion Bridle', 'Champion Saddle Pad', 'Champion Stirrups'] as const;
+        const base = bases.find(b => itemName === b || itemName.startsWith(b + ' +'));
+        if (!base) {
+            throw new BadRequestException(`"${itemName}" is not upgradable`);
+        }
+
+        const currentLevel = parseInt(itemName.match(/\+(\d+)$/)?.[1] ?? '0', 10);
+        const nextLevel = currentLevel + 1;
+        const nextName = `${base}${nextLevel ? ' +' + nextLevel : ''}`;
+
+        if (!items[nextName]) {
+            throw new BadRequestException(`No upgrade data for "${nextName}"`);
+        }
+        const cost = itemUpgradeCost[nextLevel];
+        if (!cost) {
+            throw new BadRequestException(`No upgrade cost defined for level ${nextLevel}`);
+        }
+        const rate = successRate[nextLevel];
+        if (!rate) {
+            throw new BadRequestException(`No success rate defined for level ${nextLevel}`);
+        }
+
+        const roll = Math.random() * 100;
+        const succeeded = roll < rate.success;
+        const willBreak = !succeeded && rate.break;
+
+        return this.prisma.$transaction(async tx => {
+            // 1) Atomically decrement PHORSE & MEDALS
+            const dec = await tx.user.updateMany({
+                where: {
+                    wallet: ownerWallet,
+                    phorse: { gte: cost.phorse },
+                    medals: { gte: cost.medal },
+                },
+                data: {
+                    phorse: { decrement: cost.phorse },
+                    medals: { decrement: cost.medal },
+                }
+            });
+            if (dec.count === 0) {
+                throw new BadRequestException(
+                    `Need ${cost.phorse} PHORSE & ${cost.medal} MEDALS to upgrade`
+                );
+            }
+
+            // 2) Lookup user ID
+            const user = await tx.user.findUnique({
+                where: { wallet: ownerWallet },
+                select: { id: true },
+            });
+            if (!user) throw new NotFoundException('User not found');
+
+            // 3) Bulk-delete Scrap Metal
+            if (cost.metal > 0) {
+                const metalIds = (await tx.item.findMany({
+                    where: { ownerId: user.id, name: 'Scrap Metal' },
+                    orderBy: { createdAt: 'asc' },
+                    take: cost.metal,
+                    select: { id: true },
+                })).map(x => x.id);
+
+                if (metalIds.length < cost.metal) {
+                    throw new BadRequestException(`Not enough Scrap Metal (need ${cost.metal})`);
+                }
+                await tx.item.deleteMany({ where: { id: { in: metalIds } } });
+            }
+
+            // 4) Bulk-delete Scrap Leather
+            if (cost.leather > 0) {
+                const leatherIds = (await tx.item.findMany({
+                    where: { ownerId: user.id, name: 'Scrap Leather' },
+                    orderBy: { createdAt: 'asc' },
+                    take: cost.leather,
+                    select: { id: true },
+                })).map(x => x.id);
+
+                if (leatherIds.length < cost.leather) {
+                    throw new BadRequestException(`Not enough Scrap Leather (need ${cost.leather})`);
+                }
+                await tx.item.deleteMany({ where: { id: { in: leatherIds } } });
+            }
+
+            // 5) Find the item instance to operate on
+            const target = await tx.item.findFirst({
+                where: { ownerId: user.id, name: itemName, horseId: null },
+                orderBy: { createdAt: 'asc' },
+            });
+            if (!target) {
+                throw new BadRequestException(`You don’t own any "${itemName}"`);
+            }
+
+            let finalItemId: string | null = null;
+
+            // 6) Apply upgrade or break
+            if (succeeded) {
+                const upgraded = await tx.item.update({
+                    where: { id: target.id },
+                    data: { name: nextName },
+                });
+                finalItemId = upgraded.id;
+            } else if (willBreak) {
+                // delete the broken item
+                await tx.item.delete({ where: { id: target.id } });
+                finalItemId = null;
+            } else {
+                // failure but not broken: leave target as-is
+                finalItemId = target.id;
+            }
+
+            // 7) Log the attempt
+            const note = succeeded
+                ? `Upgrade succeeded: "${itemName}" → "${nextName}"`
+                : willBreak
+                    ? `Upgrade failed and broke "${itemName}"`
+                    : `Upgrade failed (no break) for "${itemName}"`;
+
+            await tx.transaction.create({
+                data: {
+                    owner: { connect: { id: user.id } },
+                    type: TransactionType.ITEM,
+                    status: TransactionStatus.COMPLETED,
+                    value: 0,
+                    note: `Attempted upgrade level ${currentLevel} → ${nextLevel}: ${note}`
+                }
+            });
+
+            return {
+                success: succeeded,
+                broken: willBreak,
+                itemId: finalItemId,
+            };
+        });
+    }
+
+    // ------------------- LISTS SECTION -----------------------
 
     /**
     * List all chests for a given user.
@@ -404,6 +544,8 @@ export class UserService {
             quantity: g._count._all,    // how many items share (name, usesLeft)
         }));
     }
+
+    // ------------------- WITHDRAW SECTION -----------------------
 
     /**
     * 1. Validate amount
@@ -512,65 +654,7 @@ export class UserService {
         };
     }
 
-    /**
-    * 1) Validate `amount` is integer in [1000..30000]
-    * 2) Fetch all on-chain horses for that wallet
-    * 3) Create a PresaleIntent (status=STARTED, amount)
-    * 4) Attach each horse to that intent (intentId)
-    */
-    async createPresaleIntent(ownerWallet: string, amount: number) {
-        // 1) Basic validation
-        if (!Number.isInteger(amount) || amount < 1000 || amount > 30000) {
-            throw new BadRequestException(
-                'Amount must be an integer between 1000 and 30000'
-            );
-        }
-
-        // 2) Fetch on-chain horses
-        const horses = await this.horseService.listBlockchainHorses(ownerWallet);
-        const horseCount = horses.length;
-        const maxAllowed = horseCount * 1000;
-        if (amount > maxAllowed) {
-            throw new BadRequestException(
-                `Presale amount cannot exceed ${maxAllowed} PHORSE ` +
-                `(1000 per horse; you have ${horseCount} horse${horseCount !== 1 ? 's' : ''})`
-            );
-        }
-
-        // 3) **New check**: make sure none of these horses have already been
-        //    used in a presaleIntent whose status is beyond STARTED
-        const locked = await this.prisma.horse.findMany({
-            where: {
-                id: { in: horses.map(h => h.id) },
-                presaleIntent: {
-                    isNot: null,
-                    is: { status: { not: IntentStage.FAILED } }
-                }
-            },
-            select: { tokenId: true },
-        });
-        if (locked.length) {
-            const ids = locked.map(h => h.tokenId).join(', ');
-            throw new BadRequestException(
-                `A presale purchase intent has already been registered for horses [${ids}]`
-            );
-        }
-
-        // 4) Create the intent & link all horses
-        const intent = await this.prisma.presaleIntent.create({
-            data: {
-                amount,
-                status: IntentStage.STARTED,
-                wallet: ownerWallet,
-                vouchedHorses: {
-                    connect: horses.map(h => ({ id: h.id })),
-                },
-            },
-        });
-
-        return intent;
-    }
-
+    // ------------------- DISCORD SECTION -----------------------
     async linkDiscord(wallet: string, discordId: string, discordTag: string) {
         return this.prisma.user.update({
             where: { wallet: wallet },

@@ -62,6 +62,7 @@ export class AppModule implements NestModule {
         { path: 'user/chests/buy', method: RequestMethod.POST },
         { path: 'user/chests/open', method: RequestMethod.POST },
         { path: 'user/items/recycle', method: RequestMethod.POST },
+        { path: 'user/items/upgrade', method: RequestMethod.POST },
         { path: 'user/withdraw', method: RequestMethod.POST },
         { path: 'user/link-discord', method: RequestMethod.POST },
         { path: 'horses/*', method: RequestMethod.PUT },

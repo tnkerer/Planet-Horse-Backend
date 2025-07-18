@@ -5,6 +5,7 @@ import { WithdrawDto } from './dto/withdraw.dto';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { CreatePresaleIntentDto } from './dto/create-presale-intent.dto';
 import { RecycleDto } from './dto/recycle.dto';
+import { UpgradeItemDto } from './dto/upgrade-item.dto';
 
 @Controller('user')
 @UseGuards(JwtAuthGuard, ThrottlerGuard)
@@ -81,6 +82,30 @@ export class UserController {
     return { reward };
   }
 
+  /**
+   * POST /user/items/upgrade
+   * Body: { name: string }
+   */
+  @Post('items/upgrade')
+  async upgradeItem(
+    @Request() req,
+    @Body() dto: UpgradeItemDto
+  ) {
+    if (typeof dto.name !== 'string' || !dto.name.trim()) {
+      throw new BadRequestException('Request body must include a non-empty "name"');
+    }
+
+    const updatedItem = await this.users.upgradeItem(
+      req.user.wallet,
+      dto.name.trim()
+    );
+
+    if (!updatedItem) {
+      throw new NotFoundException(`Failed to upgrade item "${dto.name}"`);
+    }
+
+    return { item: updatedItem };
+  }
 
   @Get('transactions')
   async listTransactions(@Request() req) {
