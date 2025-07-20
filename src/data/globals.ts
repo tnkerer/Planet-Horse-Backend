@@ -39,5 +39,6 @@ export const globals = {
     "Epic" : 3.2,
     "Legendary" : 4,
     "Mythic" : 4.8
-  }
+  },
+  "Withdraw Tax" : 100
 } as const;

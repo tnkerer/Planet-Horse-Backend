@@ -63,23 +63,23 @@ export class UserController {
     return this.users.listChests(req.user.wallet);
   }
 
-  /**
-  * POST /user/items/recycle
-  * Body: { name: string; uses: number }
-  * Returns: { reward: string | null }
-  */
+  /** 
+     * POST /user/items/recycle
+     * Body: { name: string; uses: number; quantity: number }
+     * Returns: { rewards: Array<string | null> }
+     */
   @Post('items/recycle')
   async recyle(
     @Request() req,
     @Body() dto: RecycleDto
-  ): Promise<{ reward: string | null }> {
-    // dto.name is guaranteed to be string and dto.uses ≥ 1 by class-validator
-    const reward = await this.users.recyle(
+  ): Promise<{ rewards: (string | null)[] }> {
+    const rewards = await this.users.recyle(
       req.user.wallet,
       dto.name,
-      dto.uses
+      dto.uses,
+      dto.quantity
     );
-    return { reward };
+    return { rewards };
   }
 
   /**
@@ -144,6 +144,38 @@ export class UserController {
     // 3) Delegate to the service
     return this.users.phorseWithdraw(req.user.wallet, amount);
   }
+
+  /**
+* POST /user/item-withdraw
+* Body: { name: string; quantity: number }
+*/
+  @Throttle({ default: { limit: 25, ttl: 60_000 } })
+  @Post('item-withdraw')
+  async itemWithdraw(
+    @Request() req,
+    @Body() body: any = {}
+  ): Promise<{ requestId: string }> {
+    // 1) Validate body structure
+    if (typeof body !== 'object' || body === null) {
+      throw new BadRequestException('Request body must be JSON');
+    }
+
+    const { name, quantity } = body;
+
+    // 2) Validate fields
+    if (typeof name !== 'string' || name.trim() === '') {
+      throw new BadRequestException('Request body must include a valid "name" string');
+    }
+
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new BadRequestException('"quantity" must be a positive integer');
+    }
+
+    // 3) Delegate to the service
+    const result = await this.users.itemWithdraw(req.user.wallet, name, quantity);
+    return { requestId: result.requestId };
+  }
+
 
   @Get('withdraw-tax')
   async checkWithdrawTax(@Request() req) {

@@ -8,7 +8,9 @@ export const items = {
         "uses": 1,
         "property": {
             "currentEnergy": 4
-        }
+        },
+        "chainId" : 1000,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeiaqn6tk7vp3ldgpvvqtmg2eozqt5pntcrvb4pjqfdc2aoyiqwldny'
     },
     "Big Hay Bale": {
         "name": "Big Hay Bale",
@@ -19,7 +21,9 @@ export const items = {
         "uses": 1,
         "property": {
             "currentEnergy": 12
-        }
+        },
+        "chainId" : 2000,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeieyjcwjc5lhzh2gelbsogmnfeof4bc63aghs444epbczycol26r5a'
     },
     "Common Saddle": {
         "name": "Common Saddle",
@@ -27,7 +31,9 @@ export const items = {
         "description": "It will decrease the chance of a horse getting hurt by 30% during the course of 6 races.",
         "breakable": true,
         "consumable": false,
-        "uses": 6
+        "uses": 6,
+        "chainId" : 3000,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeieqp44wwiosdqu5pbddx4fzevouedhtzqsilq4d47adr3bx4grr4m'
     },
     "Superior XP Potion": {
         "name": "Superior XP Potion",
@@ -35,7 +41,9 @@ export const items = {
         "description": "It doubles the XP earned from racing during the course of 4 races.",
         "breakable": true,
         "consumable": false,
-        "uses": 4
+        "uses": 4,
+        "chainId" : 4000,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeiagu4dv4sb43czvikzd5b5qeul3ronnqgbitf2vrlxxmurkj5tjli'
     },
     "Common XP Potion": {
         "name": "Common XP Potion",
@@ -43,7 +51,9 @@ export const items = {
         "description": "It grants +50% XP from racing during the course of 4 races.",
         "breakable": true,
         "consumable": false,
-        "uses": 4
+        "uses": 4,
+        "chainId" : 5000,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeibun6mwekad6vas2gkag6tmwlvus2pbl3lal5mytyzjjbhwk4ho6e'
     },
     "Common Horseshoe": {
         "name": "Common Horseshoe",
@@ -51,7 +61,9 @@ export const items = {
         "description": "Improve the odds of a horse scoring a better position by 10% during the course of 6 races.",
         "breakable": true,
         "consumable": false,
-        "uses": 6
+        "uses": 6,
+        "chainId" : 6000,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeicru36tgocx26vndrml2mhxwghzqkgyljuxp5fnnvidwchdtclwai'
     },
     "Pumpers": {
         "name": "Pumpers",
@@ -59,7 +71,9 @@ export const items = {
         "description": "A performance enhancing drug that greatly increases your chances of securing a better position, but also raises the risk of injury. Enough for 5 uses.",
         "breakable": true,
         "consumable": false,
-        "uses": 5
+        "uses": 5,
+        "chainId" : 7000,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeiandgvyjf4t7fg65vc4dzfcbro5cmrn7bt4oo5javi5x5jdtfnj5i'
     },
     "Scrap Metal": {
         "name": "Scrap Metal",
@@ -67,7 +81,9 @@ export const items = {
         "description": "Pieces of repurposed metal used for several crafting techniques.",
         "breakable": true,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 8000,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeidskgyj5bhr6h7aw5d3wjqjpo46vbc6oqdntuel5mklvurr5ajlku'
     },
     "Scrap Leather": {
         "name": "Scrap Leather",
@@ -75,7 +91,9 @@ export const items = {
         "description": "Pieces of repurposed leather used for several crafting techniques.",
         "breakable": true,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 9000,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeidljvqvid6dh7eomzcyuez7vlz5efiyznxey46wh5u75hrrp6nmpi'
     },
     "Baby Ronke Trophy": {
         "name": "Baby Ronke Trophy",
@@ -83,7 +101,9 @@ export const items = {
         "description": "Reduce race cost by 2 energy. A plush trophy to celebrate your victory!",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 10000,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeibv5xrrvpblewknapabtevnm33poi2i32b3ypuz4qh7xz2dr4kpd4'
     },
     "Champion Saddle Pad": {
         "name": "Champion Saddle Pad",
@@ -91,7 +111,9 @@ export const items = {
         "description": "Increase SPRINT by 3 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 11000,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeidvkvfeequ3z7vvmbsf76ym5jupjrtongygv7d6achulo5zeynjgy'
     },
     "Champion Saddle Pad +1": {
         "name": "Champion Saddle Pad +1",
@@ -99,7 +121,9 @@ export const items = {
         "description": "Increase SPRINT by 6 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 11001,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeidvkvfeequ3z7vvmbsf76ym5jupjrtongygv7d6achulo5zeynjgy'
     },
     "Champion Saddle Pad +2": {
         "name": "Champion Saddle Pad +2",
@@ -107,7 +131,9 @@ export const items = {
         "description": "Increase SPRINT by 9 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 11002,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeidvkvfeequ3z7vvmbsf76ym5jupjrtongygv7d6achulo5zeynjgy'
     },
     "Champion Saddle Pad +3": {
         "name": "Champion Saddle Pad +3",
@@ -115,7 +141,9 @@ export const items = {
         "description": "Increase SPRINT by 12 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 11003,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeido3asg4hxbdildw5sgor2xy4jnxyh5ozpxophlmtewgwhjp7jr4e'
     },
     "Champion Saddle Pad +4": {
         "name": "Champion Saddle Pad +4",
@@ -123,7 +151,9 @@ export const items = {
         "description": "Increase SPRINT by 15 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 11004,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeido3asg4hxbdildw5sgor2xy4jnxyh5ozpxophlmtewgwhjp7jr4e'
     },
     "Champion Saddle Pad +5": {
         "name": "Champion Saddle Pad +5",
@@ -131,7 +161,9 @@ export const items = {
         "description": "Increase SPRINT by 18 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 11005,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeido3asg4hxbdildw5sgor2xy4jnxyh5ozpxophlmtewgwhjp7jr4e'
     },
     "Champion Saddle Pad +6": {
         "name": "Champion Saddle Pad +6",
@@ -139,7 +171,9 @@ export const items = {
         "description": "Increase SPRINT by 21 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 11006,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeifjthdzte2teiidizsgffybcevqzbxp6x5stkyxlnzwhqclylwpk4'
     },
     "Champion Saddle Pad +7": {
         "name": "Champion Saddle Pad +7",
@@ -147,7 +181,9 @@ export const items = {
         "description": "Increase SPRINT by 24 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 11007,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeifjthdzte2teiidizsgffybcevqzbxp6x5stkyxlnzwhqclylwpk4'
     },
     "Champion Saddle Pad +8": {
         "name": "Champion Saddle Pad +8",
@@ -155,7 +191,9 @@ export const items = {
         "description": "Increase SPRINT by 27 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 11008,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeiffsozdimkp3xq6ngjqef5cksm5ou7syhmnbe7i3o6g24wpsmhhwa'
     },
     "Champion Saddle Pad +9": {
         "name": "Champion Saddle Pad +9",
@@ -163,7 +201,9 @@ export const items = {
         "description": "Increase SPRINT by 30 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 11009,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeiffsozdimkp3xq6ngjqef5cksm5ou7syhmnbe7i3o6g24wpsmhhwa'
     },
     "Champion Saddle Pad +10": {
         "name": "Champion Saddle Pad +10",
@@ -171,7 +211,9 @@ export const items = {
         "description": "Increase SPRINT by 33 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 11010,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeia6fh5xbos3ghcxv4i4jym27rzuil4o3quf677artonglphydvwqa'
     },
     "Champion Saddle Pad +11": {
         "name": "Champion Saddle Pad +11",
@@ -179,7 +221,9 @@ export const items = {
         "description": "Increase SPRINT by 36 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 11011,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeia6fh5xbos3ghcxv4i4jym27rzuil4o3quf677artonglphydvwqa'
     },
     "Champion Saddle Pad +12": {
         "name": "Champion Saddle Pad +12",
@@ -187,7 +231,9 @@ export const items = {
         "description": "Increase SPRINT by 39 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 11012,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeianred3akbtlyuhn6ympwlkvekmzeircddbj3lv57l2xreyb2lfou'
     },
     "Champion Saddle Pad +13": {
         "name": "Champion Saddle Pad +13",
@@ -195,7 +241,9 @@ export const items = {
         "description": "Increase SPRINT by 42 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 11013,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeianred3akbtlyuhn6ympwlkvekmzeircddbj3lv57l2xreyb2lfou'
     },
     "Champion Saddle Pad +14": {
         "name": "Champion Saddle Pad +14",
@@ -203,7 +251,9 @@ export const items = {
         "description": "Increase SPRINT by 45 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 11014,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeie3y5674c7dlwdnln55ddohsyeijvcvtkpavkopzfqpmdifzcpajq'
     },
     "Champion Saddle Pad +15": {
         "name": "Champion Saddle Pad +15",
@@ -211,7 +261,9 @@ export const items = {
         "description": "Increase SPRINT by 48 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 11015,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeie3y5674c7dlwdnln55ddohsyeijvcvtkpavkopzfqpmdifzcpajq'
     },
     "Champion Bridle": {
         "name": "Champion Bridle",
@@ -219,7 +271,9 @@ export const items = {
         "description": "Increase SPEED by 3 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 12000,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeid2grqx6np2zamaxnu3kkqz53syene7hp6u7sx62okqwjws5ffine'
     },
     "Champion Bridle +1": {
         "name": "Champion Bridle +1",
@@ -227,7 +281,9 @@ export const items = {
         "description": "Increase SPEED by 6 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 12001,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeid2grqx6np2zamaxnu3kkqz53syene7hp6u7sx62okqwjws5ffine'
     },
     "Champion Bridle +2": {
         "name": "Champion Bridle +2",
@@ -235,7 +291,9 @@ export const items = {
         "description": "Increase SPEED by 9 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 12002,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeid2grqx6np2zamaxnu3kkqz53syene7hp6u7sx62okqwjws5ffine'
     },
     "Champion Bridle +3": {
         "name": "Champion Bridle +3",
@@ -243,7 +301,9 @@ export const items = {
         "description": "Increase SPEED by 12 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 12003,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeicpheju2m3zoapkiefxqmez5obpjwcaw4grvo5geinltryrlq2lea'
     },
     "Champion Bridle +4": {
         "name": "Champion Bridle +4",
@@ -251,7 +311,9 @@ export const items = {
         "description": "Increase SPEED by 15 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 12004,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeicpheju2m3zoapkiefxqmez5obpjwcaw4grvo5geinltryrlq2lea'
     },
     "Champion Bridle +5": {
         "name": "Champion Bridle +5",
@@ -259,7 +321,9 @@ export const items = {
         "description": "Increase SPEED by 18 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 12005,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeicpheju2m3zoapkiefxqmez5obpjwcaw4grvo5geinltryrlq2lea'
     },
     "Champion Bridle +6": {
         "name": "Champion Bridle +6",
@@ -267,7 +331,9 @@ export const items = {
         "description": "Increase SPEED by 21 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 12006,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeigj6euuhnn6msmrx3ypk7jpqsrem4uqpj5wfra5kexapqk3mrcqky'
     },
     "Champion Bridle +7": {
         "name": "Champion Bridle +7",
@@ -275,7 +341,9 @@ export const items = {
         "description": "Increase SPEED by 24 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 12007,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeigj6euuhnn6msmrx3ypk7jpqsrem4uqpj5wfra5kexapqk3mrcqky'
     },
     "Champion Bridle +8": {
         "name": "Champion Bridle +8",
@@ -283,7 +351,9 @@ export const items = {
         "description": "Increase SPEED by 27 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 12008,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeibgz52pltgk4q4ourvfir3nd6hbec4m6gxaaninmlsg7qw6liym7y'
     },
     "Champion Bridle +9": {
         "name": "Champion Bridle +9",
@@ -291,7 +361,9 @@ export const items = {
         "description": "Increase SPEED by 30 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 12009,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeibgz52pltgk4q4ourvfir3nd6hbec4m6gxaaninmlsg7qw6liym7y'
     },
     "Champion Bridle +10": {
         "name": "Champion Bridle +10",
@@ -299,7 +371,9 @@ export const items = {
         "description": "Increase SPEED by 33 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 12010,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeibdcwp7rbpdx6ua7dsjrdzg2ij3ohxlgfhixkt32cokred3ybxks4'
     },
     "Champion Bridle +11": {
         "name": "Champion Bridle +11",
@@ -307,7 +381,9 @@ export const items = {
         "description": "Increase SPEED by 36 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 12011,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeibdcwp7rbpdx6ua7dsjrdzg2ij3ohxlgfhixkt32cokred3ybxks4'
     },
     "Champion Bridle +12": {
         "name": "Champion Bridle +12",
@@ -315,7 +391,9 @@ export const items = {
         "description": "Increase SPEED by 39 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 12012,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeiap6gdi54unu6ho4neixb5tksuv675hqqjy2fbfkvqq6vyuoqoyfe'
     },
     "Champion Bridle +13": {
         "name": "Champion Bridle +13",
@@ -323,7 +401,9 @@ export const items = {
         "description": "Increase SPEED by 42 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 12013,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeiap6gdi54unu6ho4neixb5tksuv675hqqjy2fbfkvqq6vyuoqoyfe'
     },
     "Champion Bridle +14": {
         "name": "Champion Bridle +14",
@@ -331,7 +411,9 @@ export const items = {
         "description": "Increase SPEED by 45 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 12014,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeicsui5pcvvd6j6mxcqnealdr2llkwlrqhr6rebmcy3isz2qsdkvgq'
     },
     "Champion Bridle +15": {
         "name": "Champion Bridle +15",
@@ -339,7 +421,9 @@ export const items = {
         "description": "Increase SPEED by 48 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 12015,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeicsui5pcvvd6j6mxcqnealdr2llkwlrqhr6rebmcy3isz2qsdkvgq'
     },
     "Champion Stirrups": {
         "name": "Champion Stirrups",
@@ -347,7 +431,9 @@ export const items = {
         "description": "Increase POWER by 3 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 13000,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeidx36wrv6rfkvgl6yymjeoezhwaky6gctwxj44a7tb4tncu73pzdu'
     },
     "Champion Stirrups +1": {
         "name": "Champion Stirrups +1",
@@ -355,7 +441,9 @@ export const items = {
         "description": "Increase POWER by 6 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 13001,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeidx36wrv6rfkvgl6yymjeoezhwaky6gctwxj44a7tb4tncu73pzdu'
     },
     "Champion Stirrups +2": {
         "name": "Champion Stirrups +2",
@@ -363,7 +451,9 @@ export const items = {
         "description": "Increase POWER by 9 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 13002,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeidx36wrv6rfkvgl6yymjeoezhwaky6gctwxj44a7tb4tncu73pzdu'
     },
     "Champion Stirrups +3": {
         "name": "Champion Stirrups +3",
@@ -371,7 +461,9 @@ export const items = {
         "description": "Increase POWER by 12 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 13003,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeiaoepfr5ase2hfiw7jebasuykxk4rh52sue7eolgcg2lt6ahl7xc4'
     },
     "Champion Stirrups +4": {
         "name": "Champion Stirrups +4",
@@ -379,7 +471,9 @@ export const items = {
         "description": "Increase POWER by 15 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 13004,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeiaoepfr5ase2hfiw7jebasuykxk4rh52sue7eolgcg2lt6ahl7xc4'
     },
     "Champion Stirrups +5": {
         "name": "Champion Stirrups +5",
@@ -387,7 +481,9 @@ export const items = {
         "description": "Increase POWER by 18 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 13005,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeiaoepfr5ase2hfiw7jebasuykxk4rh52sue7eolgcg2lt6ahl7xc4'
     },
     "Champion Stirrups +6": {
         "name": "Champion Stirrups +6",
@@ -395,7 +491,9 @@ export const items = {
         "description": "Increase POWER by 21 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 13006,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeiekuhdhytkvdupozpzki2cqgzaq2g7rlut532raqetvovboxmlh3m'
     },
     "Champion Stirrups +7": {
         "name": "Champion Stirrups +7",
@@ -403,7 +501,9 @@ export const items = {
         "description": "Increase POWER by 24 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 13007,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeiekuhdhytkvdupozpzki2cqgzaq2g7rlut532raqetvovboxmlh3m'
     },
     "Champion Stirrups +8": {
         "name": "Champion Stirrups +8",
@@ -411,7 +511,9 @@ export const items = {
         "description": "Increase POWER by 27 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 13008,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeib3al2xcmq5j3yytqhk6p2yxbu2kk2ixy36lbhmkuygpbbtzhmgcq'
     },
     "Champion Stirrups +9": {
         "name": "Champion Stirrups +9",
@@ -419,7 +521,9 @@ export const items = {
         "description": "Increase POWER by 30 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 13009,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeib3al2xcmq5j3yytqhk6p2yxbu2kk2ixy36lbhmkuygpbbtzhmgcq'
     },
     "Champion Stirrups +10": {
         "name": "Champion Stirrups +10",
@@ -427,7 +531,9 @@ export const items = {
         "description": "Increase POWER by 33 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 13010,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeiau7mcbqaskwl54icjtypbeuwjs7zaekbgx45tszcsuwmna5ucpii'
     },
     "Champion Stirrups +11": {
         "name": "Champion Stirrups +11",
@@ -435,7 +541,9 @@ export const items = {
         "description": "Increase POWER by 36 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 13011,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeiau7mcbqaskwl54icjtypbeuwjs7zaekbgx45tszcsuwmna5ucpii'
     },
     "Champion Stirrups +12": {
         "name": "Champion Stirrups +12",
@@ -443,7 +551,9 @@ export const items = {
         "description": "Increase POWER by 39 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 13012,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeid5pqtnljlmmaqusnbxvncsrs2yemekx4z7fg2zxpvfr22ai2pzrq'
     },
     "Champion Stirrups +13": {
         "name": "Champion Stirrups +13",
@@ -451,7 +561,9 @@ export const items = {
         "description": "Increase POWER by 42 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 13013,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeid5pqtnljlmmaqusnbxvncsrs2yemekx4z7fg2zxpvfr22ai2pzrq'
     },
     "Champion Stirrups +14": {
         "name": "Champion Stirrups +14",
@@ -459,7 +571,9 @@ export const items = {
         "description": "Increase POWER by 45 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 13014,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeia7g55avo45pmsyxr6osjrhsv7lmrtxuozcpbu5fsw334fberlkdi'
     },
     "Champion Stirrups +15": {
         "name": "Champion Stirrups +15",
@@ -467,7 +581,9 @@ export const items = {
         "description": "Increase POWER by 48 points during races.",
         "breakable": false,
         "consumable": false,
-        "uses": 1
+        "uses": 1,
+        "chainId" : 13015,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeia7g55avo45pmsyxr6osjrhsv7lmrtxuozcpbu5fsw334fberlkdi'
     }
 }
 

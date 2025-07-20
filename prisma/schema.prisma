@@ -21,6 +21,7 @@ model User {
   transactions Transaction[]
   chests       Chest[]
   requests     BridgeRequest[]
+  itemRequests ItemBridgeRequest[]
   createdAt    DateTime        @default(now())
   updatedAt    DateTime?       @updatedAt
   phorse       Float           @default(0)
@@ -122,6 +123,19 @@ model BridgeRequest {
   transaction   Transaction @relation(fields: [transactionId], references: [id])
   transactionId String      @unique
   createdAt     DateTime    @default(now())
+}
+
+model ItemBridgeRequest {
+  id            String    @id @default(uuid())
+  owner         User        @relation(fields: [requesterId], references: [id])
+  requesterId   String
+  request       Request
+  quantity      Int
+  tokenId       Int
+  txId          String?
+  status        TransactionStatus
+  createdAt DateTime          @default(now())
+  updatedAt DateTime? @updatedAt
 }
 
 enum Request {

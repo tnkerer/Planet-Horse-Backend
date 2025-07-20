@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { chests } from 'src/data/items';
-import { TransactionStatus, TransactionType, Request, IntentStage, PresaleIntent } from '@prisma/client';
+import { TransactionStatus, TransactionType, Request } from '@prisma/client';
 import { chestsPercentage, items } from '../data/items';
+import { globals } from 'src/data/globals';
 import { getWithdrawUserPct, withdrawTaxConfig } from './withdraw-tax';
 import { HorseService } from 'src/horse/horse.service';
 import { itemUpgradeCost, successRate } from 'src/data/item_progression';
@@ -245,93 +246,134 @@ export class UserService {
     }
 
     /**
-    * Recycle one item instance matching the given name & remaining uses,
-    * and roll for scrap.
-    *
-    * @param ownerWallet the user's wallet address
-    * @param itemName    the exact name of the item to recycle
-    * @param uses        the exact remaining-uses value on that item instance
-    * @returns           the scrap you received ("Scrap Metal"|"Scrap Leather"), or null if nothing
-    */
+     * Recycle up to `quantity` copies of the given item (name + uses).
+     * Rolls scrap for each, credits any Scrap Metal/Leather in bulk,
+     * logs all transactions in bulk, and returns your rewards per item.
+     *
+     * @param ownerWallet  the user's wallet
+     * @param itemName     the exact name of the item to recycle
+     * @param uses         the exact usesLeft value
+     * @param quantity     how many copies to recycle
+     * @returns            an array of length ≤ quantity of rewards
+     *                    (each "Scrap Metal", "Scrap Leather", or null)
+     */
     async recyle(
         ownerWallet: string,
         itemName: string,
-        uses: number
-    ): Promise<string | null> {
+        uses: number,
+        quantity: number
+    ): Promise<(string | null)[]> {
+        if (!Number.isInteger(quantity) || quantity < 1) {
+            throw new BadRequestException('Quantity must be a positive integer');
+        }
+
         return this.prisma.$transaction(async tx => {
-            // 1) find the user
+            // 1) find user
             const user = await tx.user.findUnique({
                 where: { wallet: ownerWallet },
                 select: { id: true },
             });
             if (!user) throw new NotFoundException('User not found');
 
-            // 2) verify the item exists in our master list
+            // 2) validate item exists
             const def = (items as Record<string, any>)[itemName];
             if (!def) {
                 throw new NotFoundException(`Item "${itemName}" does not exist`);
             }
 
-            // 3) check the user has at least one matching instance
-            const own = await tx.item.findFirst({
+            // 3) grab up to `quantity` matching item IDs
+            const ownItems = await tx.item.findMany({
                 where: {
                     ownerId: user.id,
                     name: itemName,
                     uses: uses,
                     horseId: null,
                 },
+                select: { id: true },
                 orderBy: { createdAt: 'asc' },
+                take: quantity,
             });
-            if (!own) {
+            if (ownItems.length < quantity) {
                 throw new BadRequestException(
-                    `You don't have any "${itemName}" with ${uses} uses`
+                    `You only have ${ownItems.length} "${itemName}"(uses=${uses})`
                 );
             }
 
-            // 4) delete that instance (fully recycled)
-            await tx.item.delete({ where: { id: own.id } });
+            // 4) delete them in one go
+            const ids = ownItems.map(i => i.id);
+            await tx.item.deleteMany({ where: { id: { in: ids } } });
 
-            // 5) roll for scrap
-            const roll = Math.random() * 100;
-            let reward: string | null = null;
-            if (roll < 10 || roll >= 90) {
-                reward = null; // 10% nothing + top 10%
-            } else if (roll < 50) {
-                reward = 'Scrap Metal';
-            } else {
-                reward = 'Scrap Leather';
-            }
+            // 5) roll scrap for each deleted item
+            const rewards: (string | null)[] = [];
+            const scrapCreates: Array<{
+                ownerId: string;
+                name: string;
+                value: number;
+                breakable: boolean;
+                uses: number | null;
+            }> = [];
+            const txLogs: Array<{
+                ownerId: string;
+                type: TransactionType;
+                status: TransactionStatus;
+                value: number;
+                note: string;
+            }> = [];
 
-            // 6) credit scrap if any
-            if (reward) {
-                const scrapDef = items[reward];
-                await tx.item.create({
-                    data: {
-                        owner: { connect: { id: user.id } },
+            for (let i = 0; i < quantity; i++) {
+                const roll = Math.random() * 100;
+                let reward: string | null = null;
+
+                if (roll >= 10 && roll < 50) {
+                    reward = 'Scrap Metal';
+                } else if (roll >= 50 && roll < 90) {
+                    reward = 'Scrap Leather';
+                }
+                rewards.push(reward);
+
+                // prepare bulk-create data
+                if (reward) {
+                    const scrapDef = (items as Record<string, any>)[reward];
+                    scrapCreates.push({
+                        ownerId: user.id,
                         name: reward,
                         value: 1,
                         breakable: scrapDef.breakable,
                         uses: scrapDef.uses,
-                    },
-                });
-            }
+                    });
+                }
 
-            // 7) log the ITEM transaction
-            await tx.transaction.create({
-                data: {
-                    owner: { connect: { id: user.id } },
+                txLogs.push({
+                    ownerId: user.id,
                     type: TransactionType.ITEM,
                     status: TransactionStatus.COMPLETED,
                     value: 0,
                     note: reward
                         ? `Recycled "${itemName}" (uses=${uses}), got ${reward}`
                         : `Recycled "${itemName}" (uses=${uses}), got nothing`,
-                },
-            });
+                });
+            }
 
-            return reward;
+            // 6) credit all scrap in one call
+            if (scrapCreates.length) {
+                await tx.item.createMany({
+                    data: scrapCreates.map(c => ({
+                        ownerId: c.ownerId,
+                        name: c.name,
+                        value: c.value,
+                        breakable: c.breakable,
+                        uses: c.uses,
+                    })),
+                });
+            }
+
+            // 7) log all transactions in one call
+            await tx.transaction.createMany({ data: txLogs });
+
+            return rewards;
         });
     }
+
 
     async upgradeItem(ownerWallet: string, itemName: string) {
         const bases = ['Champion Bridle', 'Champion Saddle Pad', 'Champion Stirrups'] as const;
@@ -653,6 +695,95 @@ export class UserService {
             hoursSinceLast: last || user.lastRace ? hoursSince : null,
         };
     }
+
+    async itemWithdraw(ownerWallet: string, itemName: string, quantity: number) {
+        if (!Number.isInteger(quantity) || quantity <= 0) {
+            throw new BadRequestException('Invalid quantity');
+        }
+
+        // 1. Validate item name and fetch tokenId + default uses
+        const itemData = items[itemName];
+        if (!itemData) {
+            throw new BadRequestException(`Unknown item: ${itemName}`);
+        }
+        const tokenId = itemData.chainId;
+        const withdrawTax = globals['Withdraw Tax'];
+        const totalTax = withdrawTax * quantity;
+
+        return this.prisma.$transaction(async (tx) => {
+            // 2. Ensure user has enough PHORSE for tax
+            const taxResult = await tx.user.updateMany({
+                where: {
+                    wallet: ownerWallet,
+                    phorse: { gte: totalTax },
+                },
+                data: {
+                    phorse: { decrement: totalTax },
+                },
+            });
+            if (taxResult.count === 0) {
+                throw new BadRequestException('Insufficient PHORSE to pay withdraw tax');
+            }
+
+            // 3. Fetch internal user ID
+            const user = await tx.user.findUnique({
+                where: { wallet: ownerWallet },
+                select: { id: true },
+            });
+            if (!user) {
+                throw new NotFoundException('User not found');
+            }
+
+            // 4. Build the filter: always require unequipped + matching name,
+            //    and if the item is breakable, require `uses === defaultUses`.
+            const whereClause: any = {
+                ownerId: user.id,
+                name: itemName,
+                equipedBy: null,
+            };
+            if (itemData.breakable) {
+                whereClause.breakable = true;
+                whereClause.uses = itemData.uses;
+            }
+
+            // 5. Fetch up to `quantity` matching items
+            const ownedItems = await tx.item.findMany({
+                where: whereClause,
+                select: { id: true },
+                take: quantity,
+            });
+
+            if (ownedItems.length < quantity) {
+                throw new BadRequestException(
+                    `Not enough ${itemName}${itemData.breakable ? ` with ${itemData.uses} uses left` : ''}`
+                );
+            }
+
+            // 6. Burn the items (delete them)
+            await tx.item.deleteMany({
+                where: { id: { in: ownedItems.map(i => i.id) } },
+            });
+
+            // 7. Create the new ItemBridgeRequest entry
+            const itemRequest = await tx.itemBridgeRequest.create({
+                data: {
+                    requesterId: user.id,
+                    request: Request.WITHDRAW,
+                    quantity,
+                    tokenId,
+                    txId: null,
+                    status: TransactionStatus.PENDING,
+                },
+            });
+
+            // 8. Return request ID for tracking
+            return {
+                requestId: itemRequest.id,
+                message: `${quantity} ${itemName} item(s) added to bridge queue!`,
+            };
+        });
+    }
+
 
     // ------------------- DISCORD SECTION -----------------------
     async linkDiscord(wallet: string, discordId: string, discordTag: string) {
