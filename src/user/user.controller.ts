@@ -140,6 +140,9 @@ export class UserController {
     if (amount <= 999) {
       throw new BadRequestException('Amount must be greater than 999');
     }
+    if (amount > 100000) {
+      throw new BadRequestException('Amount must be lower than or exactly 100000');
+    }
 
     // 3) Delegate to the service
     return this.users.phorseWithdraw(req.user.wallet, amount);
