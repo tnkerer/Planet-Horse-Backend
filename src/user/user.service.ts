@@ -412,6 +412,7 @@ export class UserService {
                 },
                 data: {
                     phorse: { decrement: cost.phorse },
+                    totalPhorseSpent: { increment: cost.phorse },
                     medals: { decrement: cost.medal },
                 }
             });
@@ -719,6 +720,7 @@ export class UserService {
                 },
                 data: {
                     phorse: { decrement: totalTax },
+                    totalPhorseSpent : { increment: totalTax }
                 },
             });
             if (taxResult.count === 0) {

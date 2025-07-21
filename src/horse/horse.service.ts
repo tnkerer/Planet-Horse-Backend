@@ -520,6 +520,7 @@ export class HorseService {
           phorse: true,
           medals: true,
           totalPhorseEarned: true,
+          totalPhorseSpent: true,
           lastRace: true,
         },
       });
@@ -658,6 +659,7 @@ export class HorseService {
           where: { id: user.id },
           data: {
             phorse: user.phorse + totalToken - (tokenIds.length * 50),
+            totalPhorseSpent: user.totalPhorseSpent + (tokenIds.length * 50),
             medals: user.medals + totalMedal,
             totalPhorseEarned: user.totalPhorseEarned + totalToken,
             ...(user.lastRace ? {} : { lastRace: new Date() }),
