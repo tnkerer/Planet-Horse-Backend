@@ -1,10 +1,10 @@
 // src/auth/auth.service.ts
 import { Injectable, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
-import { JwtService }    from '@nestjs/jwt'
-import { randomBytes }   from 'crypto'
+import { JwtService } from '@nestjs/jwt'
+import { randomBytes } from 'crypto'
 import { verifyMessage } from 'ethers'
-import { UserService }    from '../user/user.service';
+import { UserService } from '../user/user.service';
 
 @Injectable()
 export class AuthService {
@@ -12,16 +12,16 @@ export class AuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private userService: UserService
-  ) {}
+  ) { }
 
   async createAuthMessage(address: string) {
     const nonce = randomBytes(16).toString('hex')
     await this.prisma.nonce.create({
-      data: { address: address.toLowerCase(), nonce, expiresAt: new Date(Date.now() + 10*60*1000) }
+      data: { address: address.toLowerCase(), nonce, expiresAt: new Date(Date.now() + 10 * 60 * 1000) }
     })
 
-    const domain   = process.env.SITE_DOMAIN || 'localhost'
-    const uri      = process.env.SITE_URL    || 'http://localhost:3000'
+    const domain = process.env.SITE_DOMAIN || 'localhost'
+    const uri = process.env.SITE_URL || 'http://localhost:3000'
     const issuedAt = new Date().toISOString()
 
     return `${domain} wants you to sign in with your Ronin account:
@@ -35,22 +35,22 @@ Nonce: ${nonce}
 Issued At: ${issuedAt}`
   }
 
-  async verifyAndSign(message: string, signature: string) {
-    const lines      = message.split('\n')
-    const addressLine= lines[1].trim()
+  async verifyAndSign(message: string, signature: string, refCode?: string) {
+    const lines = message.split('\n')
+    const addressLine = lines[1].trim()
     const domainLine = lines[0].split(' ')[0]
-    const uriLine    = lines.find(l => l.startsWith('URI: '))!.slice(5)
-    const versionLine= lines.find(l => l.startsWith('Version: '))!.slice(9)
-    const chainLine  = lines.find(l => l.startsWith('Chain ID: '))!.slice(10)
-    const nonceLine  = lines.find(l => l.startsWith('Nonce: '))!.slice(7)
+    const uriLine = lines.find(l => l.startsWith('URI: '))!.slice(5)
+    const versionLine = lines.find(l => l.startsWith('Version: '))!.slice(9)
+    const chainLine = lines.find(l => l.startsWith('Chain ID: '))!.slice(10)
+    const nonceLine = lines.find(l => l.startsWith('Nonce: '))!.slice(7)
 
-    if (domainLine  !== (process.env.SITE_DOMAIN||'localhost'))  
+    if (domainLine !== (process.env.SITE_DOMAIN || 'localhost'))
       throw new BadRequestException('Invalid domain')
-    if (uriLine     !== (process.env.SITE_URL   ||'http://localhost:3000')) 
+    if (uriLine !== (process.env.SITE_URL || 'http://localhost:3000'))
       throw new BadRequestException('Invalid URI')
-    if (versionLine !== '1')                             
+    if (versionLine !== '1')
       throw new BadRequestException('Invalid version')
-    if (chainLine.toLowerCase() !== '0x507')             
+    if (chainLine.toLowerCase() !== '0x507')
       throw new BadRequestException('Invalid chain')
 
     const record = await this.prisma.nonce.findUnique({ where: { nonce: nonceLine } })
@@ -66,7 +66,18 @@ Issued At: ${issuedAt}`
     await this.prisma.nonce.delete({ where: { nonce: nonceLine } })
 
     const walletAddress = addressLine.toLowerCase();
-    await this.userService.findOrCreateByAddress(walletAddress);
+    // Resolve referredById from refCode (if provided)
+    let referredById: string | undefined;
+    if (refCode) {
+      const inviter = await this.prisma.user.findUnique({
+        where: { refCode },
+        select: { id: true },
+      });
+      referredById = inviter?.id;
+    }
+
+    // Delegate to user service for creation/update
+    await this.userService.findOrCreateByAddress(walletAddress, referredById);
 
     return this.jwt.sign(
       { address: addressLine.toLowerCase() },

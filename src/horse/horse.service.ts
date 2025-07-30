@@ -166,7 +166,8 @@ export class HorseService {
           currentEnergy: true,
           maxEnergy: true,
           rarity: true,
-          status: true
+          status: true,
+          equipments: true
         },
       });
       if (!horse) throw new NotFoundException('Horse not found');
@@ -187,8 +188,25 @@ export class HorseService {
         currentEnergy,
         maxEnergy,
         rarity,
-        status
+        status,
+        equipments
       } = horse;
+
+      const equippedModifiers = equipments
+        .map((item) => itemModifiers[item.name])
+        .filter(Boolean);
+
+      const totalModifier = equippedModifiers.reduce(
+        (acc, mod) => ({
+          positionBoost: acc.positionBoost * mod.positionBoost,
+          hurtRate: acc.hurtRate * mod.hurtRate,
+          xpMultiplier: acc.xpMultiplier * mod.xpMultiplier,
+          energySaved: acc.energySaved + mod.energySaved,
+        }),
+        { positionBoost: 1, hurtRate: 1, xpMultiplier: 1, energySaved: 0 }
+      );
+
+      const baseEnergy = globals['Energy Spent'] as number;
 
       // 3) Determine XP requirement for current level
       const requiredXp = xpProgression[oldLevel];
@@ -299,7 +317,7 @@ export class HorseService {
             currentEnergy: updatedCurrentEnergy,
             exp: remainingXp,
             upgradable: newUpgradable,
-            status: ((updatedCurrentEnergy > 11) && status == 'SLEEP') ? 'IDLE' : status,
+            status: ((updatedCurrentEnergy > (baseEnergy - 1 - totalModifier.energySaved)) && status == 'SLEEP') ? 'IDLE' : status,
           },
         }),
       ]);
@@ -411,7 +429,7 @@ export class HorseService {
       const isHurt = Math.random() * totalModifier.hurtRate < hurtChance;
 
       let finalStatus: 'IDLE' | 'SLEEP' | 'BRUISED' = 'IDLE';
-      if (newEnergy < baseEnergy) finalStatus = 'SLEEP';
+      if (newEnergy < (baseEnergy - totalModifier.energySaved)) finalStatus = 'SLEEP';
       if (isHurt) finalStatus = 'BRUISED';
 
       const maxLevelForRarity = levelLimits[horse.rarity];
@@ -611,7 +629,7 @@ export class HorseService {
 
         let finalStatus: 'IDLE' | 'SLEEP' | 'BRUISED' = 'IDLE';
         if (isHurt) finalStatus = 'BRUISED';
-        else if (newEnergy < baseEnergy) finalStatus = 'SLEEP';
+        else if (newEnergy < (baseEnergy - mods.energySaved)) finalStatus = 'SLEEP';
 
         // d) xp & upgradable flag
         const updatedExp = horse.exp + xpReward;
@@ -732,7 +750,8 @@ export class HorseService {
           status: true,
           level: true,
           currentEnergy: true,
-          rarity: true
+          rarity: true,
+          equipments: true
         },
       });
       if (!horse) {
@@ -760,7 +779,24 @@ export class HorseService {
       }
 
       // 5) Deduct cost and set new status
-      const energySpent = globals['Energy Spent'] as number; // 12
+      const baseEnergy = globals['Energy Spent'] as number; // 12
+
+      const equippedModifiers = horse.equipments
+        .map((item) => itemModifiers[item.name])
+        .filter(Boolean);
+
+      const totalModifier = equippedModifiers.reduce(
+        (acc, mod) => ({
+          positionBoost: acc.positionBoost * mod.positionBoost,
+          hurtRate: acc.hurtRate * mod.hurtRate,
+          xpMultiplier: acc.xpMultiplier * mod.xpMultiplier,
+          energySaved: acc.energySaved + mod.energySaved,
+        }),
+        { positionBoost: 1, hurtRate: 1, xpMultiplier: 1, energySaved: 0 }
+      );
+
+      const energySpent = baseEnergy - totalModifier.energySaved;
+
       const newStatus =
         horse.currentEnergy >= energySpent ? 'IDLE' : 'SLEEP';
 
@@ -853,6 +889,7 @@ export class HorseService {
           currentSprint: true,
           currentSpeed: true,
           status: true,
+          equipments: true
           // (if you add other integer fields later, include them in select)
         },
       });
@@ -900,13 +937,33 @@ export class HorseService {
           );
         }
 
+        const baseEnergy = globals['Energy Spent'] as number;
+
+        // Aggregate modifiers from equipped items
+        const equippedModifiers = horse.equipments
+          .map((item) => itemModifiers[item.name])
+          .filter(Boolean);
+
+        const totalModifier = equippedModifiers.reduce(
+          (acc, mod) => ({
+            positionBoost: acc.positionBoost * mod.positionBoost,
+            hurtRate: acc.hurtRate * mod.hurtRate,
+            xpMultiplier: acc.xpMultiplier * mod.xpMultiplier,
+            energySaved: acc.energySaved + mod.energySaved,
+          }),
+          { positionBoost: 1, hurtRate: 1, xpMultiplier: 1, energySaved: 0 }
+        );
+
+        const energySpent = baseEnergy - totalModifier.energySaved;
+
+
         if (fieldName === 'currentEnergy') {
           // cap at maxEnergy
           let newEnergy = oldValue + incValue;
           if (newEnergy > horse.maxEnergy) {
             newEnergy = horse.maxEnergy;
           }
-          if (newEnergy >= globals["Energy Spent"] && horse.status === 'SLEEP') {
+          if (newEnergy >= energySpent && horse.status === 'SLEEP') {
             updateData.status = Status.IDLE
           }
           updateData.currentEnergy = newEnergy;
@@ -1154,6 +1211,7 @@ export class HorseService {
       include: {
         raceHistory: {
           orderBy: { createdAt: 'desc' },
+          take: 50, // Limit to the last 50 entries
         },
       },
     });
@@ -1164,5 +1222,92 @@ export class HorseService {
 
     return horse.raceHistory;
   }
+
+
+  async changeNickname(
+    ownerWallet: string,
+    tokenId: string,
+    nickname: string,
+  ): Promise<{ newNickname: string | null; userPhorse: number }> {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Basic validation on nickname
+      nickname = nickname.trim();
+      if (nickname.length < 1 || nickname.length > 30) {
+        throw new BadRequestException('Nickname must be 1–30 characters long.');
+      }
+
+      // 2. Find user by wallet
+      const user = await tx.user.findUnique({
+        where: { wallet: ownerWallet },
+        select: { id: true, phorse: true, totalPhorseSpent: true, presalePhorse: true },
+      });
+      if (!user) throw new NotFoundException('User not found');
+
+      const userId = user.id;
+
+      // 3. Fetch horse and validate ownership
+      const horse = await tx.horse.findUnique({
+        where: { tokenId },
+        select: {
+          id: true,
+          ownerId: true,
+          nickname: true,
+        },
+      });
+
+      if (!horse) throw new NotFoundException('Horse not found');
+      if (horse.ownerId !== userId) throw new ForbiddenException('You do not own this horse');
+
+      // Check if another horse already has this nickname (case insensitive)
+      const existing = await tx.horse.findFirst({
+        where: {
+          nickname: {
+            equals: nickname,
+            mode: 'insensitive', // case-insensitive match
+          },
+          NOT: { id: horse.id },
+        },
+      });
+
+      if (existing) {
+        throw new BadRequestException(`Nickname "${nickname}" is already taken`);
+      }
+
+      // 4. Check if the nickname is already the same
+      if (horse.nickname === nickname) {
+        throw new BadRequestException('Nickname is already set to this value');
+      }
+
+      // 5. Check phorse balance
+      const COST = 500;
+      if (user.phorse < COST) {
+        throw new BadRequestException(`Not enough PHORSE: need ${COST}, have ${user.phorse}`);
+      }
+
+      // 6. Apply update atomically
+      const [updatedUser, updatedHorse] = await Promise.all([
+        tx.user.update({
+          where: { id: userId },
+          data: {
+            phorse: user.phorse - COST,
+            totalPhorseSpent: user.totalPhorseSpent + COST,
+            presalePhorse: Math.max(user.presalePhorse - COST, 0),
+          },
+          select: { phorse: true },
+        }),
+        tx.horse.update({
+          where: { id: horse.id },
+          data: { nickname },
+          select: { nickname: true },
+        }),
+      ]);
+
+      return {
+        newNickname: updatedHorse.nickname,
+        userPhorse: updatedUser.phorse,
+      };
+    });
+  }
+
 
 }

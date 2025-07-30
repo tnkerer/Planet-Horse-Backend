@@ -12,6 +12,7 @@ import { HorseModule } from './horse/horse.module';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ReferralXpCronService } from './user/referral-xp-cron.service';
 
 @Module({
   imports: [
@@ -32,7 +33,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     HorseModule
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, ReferralXpCronService],
 })
 
 export class AppModule implements NestModule {
@@ -66,6 +67,7 @@ export class AppModule implements NestModule {
         { path: 'user/withdraw', method: RequestMethod.POST },
         { path: 'user/item-withdraw', method: RequestMethod.POST },
         { path: 'user/link-discord', method: RequestMethod.POST },
+        { path: 'user/ref-code', method: RequestMethod.POST },
         { path: 'horses/*', method: RequestMethod.PUT },
       )
       .forRoutes('*')

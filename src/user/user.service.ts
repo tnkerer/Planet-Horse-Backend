@@ -7,27 +7,63 @@ import { globals } from 'src/data/globals';
 import { getWithdrawUserPct, withdrawTaxConfig } from './withdraw-tax';
 import { HorseService } from 'src/horse/horse.service';
 import { itemUpgradeCost, successRate } from 'src/data/item_progression';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class UserService {
     constructor(private readonly prisma: PrismaService, private readonly horseService: HorseService) { }
 
     /**
-    * Finds a user by wallet address or creates one with phorse = 0.
-    */
-    async findOrCreateByAddress(address: string) {
-        return this.prisma.user.upsert({
+     * Finds a user by wallet address or creates one with phorse = 0.
+     */
+    async findOrCreateByAddress(address: string, referredById?: string) {
+        const existingUser = await this.prisma.user.findUnique({
             where: { wallet: address },
-            create: {
-                wallet: address,
-                phorse: 0,
-                // name is nullable by default,
-                // horses, items, transactions start empty
-            },
-            update: {
-                // nothing to change if already exists
+        });
+
+        // If the user is referring itself, ignore the referral code
+        if (existingUser && referredById && existingUser.id === referredById) {
+            referredById = undefined;
+        }
+
+        if (!existingUser) {
+            return this.prisma.user.create({
+                data: {
+                    wallet: address,
+                    phorse: 0,
+                    referredById: referredById || null,
+                },
+            });
+        }
+
+        // Existing user with no referredById → assign referredById
+        if (referredById && !existingUser.referredById) {
+            return this.prisma.user.update({
+                where: { wallet: address },
+                data: { referredById },
+            });
+        }
+
+        return existingUser;
+    }
+
+    async getProfile(wallet: string) {
+        const user = await this.prisma.user.findUnique({
+            where: { wallet },
+            select: {
+                id: true,
+                wallet: true,
+                referredById: true,
+                phorse: true,
+                medals: true,
             },
         });
+
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
+
+        return user;
     }
 
     // ----------------------- BALANCE SECTION ------------------------
@@ -72,7 +108,17 @@ export class UserService {
             throw new BadRequestException('Invalid chest quantity');
         }
 
-        const totalCost = def.price * chestQuantity;
+        // Fetch user and check referral
+        const user = await this.prisma.user.findUnique({
+            where: { wallet: ownerWallet },
+            select: { id: true, referredById: true, phorse: true },
+        });
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
+
+        const price = user.referredById ? def.discountedPrice : def.price;
+        const totalCost = price * chestQuantity;
 
         // 2) Run everything in one Prisma transaction
         return this.prisma.$transaction(async (tx) => {
@@ -720,7 +766,7 @@ export class UserService {
                 },
                 data: {
                     phorse: { decrement: totalTax },
-                    totalPhorseSpent : { increment: totalTax }
+                    totalPhorseSpent: { increment: totalTax }
                 },
             });
             if (taxResult.count === 0) {
@@ -809,6 +855,136 @@ export class UserService {
 
         if (!user) throw new NotFoundException('User not found');
         return user;
+    }
+
+    /**
+    * Create or set a unique refCode for a user.
+    * @param wallet user's wallet address
+    * @param custom optional custom refCode
+    */
+    async createRefCode(wallet: string, custom?: string) {
+        return this.prisma.$transaction(async (tx) => {
+            // 1. Find user
+            const user = await tx.user.findUnique({
+                where: { wallet },
+                select: { id: true, refCode: true },
+            });
+
+            if (!user) {
+                throw new NotFoundException('User not found');
+            }
+
+            // 3. Custom refCode case
+            if (custom) {
+                // Sanitize and validate
+                const sanitized = custom.trim();
+                if (sanitized.length < 3) {
+                    throw new BadRequestException('Referral code must be at least 3 characters');
+                }
+                if (!/^[a-zA-Z0-9_-]+$/.test(sanitized)) {
+                    throw new BadRequestException(
+                        'Referral code may only contain letters, numbers, hyphens, and underscores'
+                    );
+                }
+
+                // Check uniqueness
+                const exists = await tx.user.findUnique({
+                    where: { refCode: sanitized },
+                    select: { id: true },
+                });
+
+                if (exists) {
+                    throw new BadRequestException('Referral code is already taken');
+                }
+
+                // Update user
+                await tx.user.update({
+                    where: { id: user.id },
+                    data: { refCode: sanitized },
+                });
+
+                return { refCode: sanitized };
+            }
+
+            // 4. Auto-generate refCode if none provided
+            let generated: string;
+            let isUnique = false;
+
+            // Try up to 5 times to avoid collisions
+            for (let i = 0; i < 5 && !isUnique; i++) {
+                generated = randomBytes(3).toString('hex'); // 6-char hex
+                const exists = await tx.user.findUnique({
+                    where: { refCode: generated },
+                    select: { id: true },
+                });
+                if (!exists) {
+                    isUnique = true;
+                }
+            }
+
+            if (!isUnique) {
+                throw new BadRequestException(
+                    'Could not generate a unique referral code, please try again'
+                );
+            }
+
+            await tx.user.update({
+                where: { id: user.id },
+                data: { refCode: generated! },
+            });
+
+            return { refCode: generated! };
+        });
+    }
+
+    async getRefCode(wallet: string) {
+        // Find user by wallet and return their referral code
+        const user = await this.prisma.user.findUnique({
+            where: { wallet },
+            select: { refCode: true }
+        });
+
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
+
+        // If user doesn't have a refCode yet, return null or message
+        if (!user.refCode) {
+            return { refCode: null };
+        }
+
+        return { refCode: user.refCode };
+    }
+
+    async getReferralStats(wallet: string) {
+        const user = await this.prisma.user.findUnique({
+            where: { wallet },
+            select: {
+                xp: true,
+                referralLevel: true,
+                referrals: true,
+                referralPhorseEarned: true, // NEW
+            },
+        });
+
+        if (!user) throw new NotFoundException('User not found');
+
+        const { levels } = await import('./referral/level');
+        const currentLevel = levels.find((lvl) => lvl.level === user.referralLevel);
+        const nextLevel = levels.find((lvl) => lvl.level === user.referralLevel + 1);
+
+        const xpForNextLevel = nextLevel
+            ? nextLevel.cumulativeXP
+            : currentLevel?.cumulativeXP || user.xp;
+
+        return {
+            totalReferrals: user.referrals.length,
+            activeReferrals: user.referrals.length,
+            totalEarned: user.referralPhorseEarned, // changed to referral earnings only
+            level: user.referralLevel,
+            xp: user.xp,
+            xpForNextLevel,
+        };
     }
 
 }

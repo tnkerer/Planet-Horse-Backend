@@ -13,6 +13,10 @@ interface ConsumeDto {
   usesLeft?: number;
 }
 
+interface ChangeNicknameDto {
+  nickname: string;
+}
+
 @Controller('horses')
 @UseGuards(JwtAuthGuard, ThrottlerGuard)
 export class HorseController {
@@ -139,6 +143,24 @@ export class HorseController {
   @Get('next-energy-recovery')
   getNextEnergyRecovery() {
     return this.energyRecoveryService.getNextEnergyRecoveryTime();
+  }
+
+  /**
+   * PUT /horses/:tokenId/change-nickname
+   * Body: { nickname: string }
+   */
+  @UseGuards(IsOwnerGuard)
+  @Put(':tokenId/change-nickname')
+  @Throttle({ default: { limit: 50, ttl: 60_000 } }) // Limit abuse of nickname changes
+  async changeNickname(
+    @Request() req,
+    @Param('tokenId') tokenId: string,
+    @Body() body: ChangeNicknameDto,
+  ) {
+    if (!body.nickname || typeof body.nickname !== 'string') {
+      throw new BadRequestException('Nickname must be a nonempty string');
+    }
+    return this.horseService.changeNickname(req.user.wallet, tokenId, body.nickname);
   }
 
 }

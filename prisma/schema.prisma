@@ -34,6 +34,23 @@ model User {
   discordId    String?  @unique
   discordTag   String?
   score        Score?
+  // Referral System
+  refCode        String?  @unique
+  referredById   String?
+  referredBy     User?    @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals      User[]   @relation("UserReferrals")
+  // Referral Levels
+  xp             Int             @default(0)
+  referralLevel  Int             @default(1)
+  referralPhorseEarned Float @default(0)
+}
+
+model ReferralXPLog {
+  id           String   @id @default(uuid())
+  referrerId   String
+  refereeId    String
+  phorseSpent  Float
+  createdAt    DateTime @default(now())
 }
 
 model Nonce {
@@ -50,6 +67,7 @@ model Horse {
   owner         User      @relation(fields: [ownerId], references: [id])
   ownerId       String
   name          String
+  nickname      String?   @unique
   sex           Sex
   status        Status
   rarity        String

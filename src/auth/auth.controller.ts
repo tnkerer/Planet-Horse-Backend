@@ -20,10 +20,10 @@ export class AuthController {
 
   @Post('verify')
   async verify(
-    @Body() body: { message: string; signature: string },
+    @Body() body: { message: string; signature: string; refCode?: string },
     @Res({ passthrough: true }) res: Response
   ) {
-    const jwt = await this.auth.verifyAndSign(body.message, body.signature)
+    const jwt = await this.auth.verifyAndSign(body.message, body.signature, body.refCode)
     res.cookie('jid', jwt, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

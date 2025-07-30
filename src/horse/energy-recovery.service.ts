@@ -43,6 +43,7 @@ export class EnergyRecoveryService {
   }
   // We no longer need to page through batches; a single UPDATE suffices.
   @Cron('5 0 */6 * * *')
+  //@Cron('30 * * * * *')
   public async handleEnergyRecovery(): Promise<void> {
     this.logger.debug('⏰ Starting 6-hour energy-recovery cron (SQL version)…');
 

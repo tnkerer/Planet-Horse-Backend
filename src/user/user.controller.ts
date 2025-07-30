@@ -197,4 +197,45 @@ export class UserController {
   async getDiscord(@Request() req) {
     return this.users.getUserDiscord(req.user.wallet);
   }
+
+  @Post('ref-code')
+  async setRefCode(
+    @Request() req,
+    @Body() body: { custom?: string }
+  ) {
+    try {
+      return await this.users.createRefCode(req.user.wallet, body?.custom);
+    } catch (error) {
+      // Ensure clean 4xx errors and avoid leaking details
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Unexpected error in setRefCode:', error);
+      throw new BadRequestException('Could not set referral code');
+    }
+  }
+
+  @Get('ref-code')
+  async getRefCode(@Request() req) {
+    try {
+      return await this.users.getRefCode(req.user.wallet);
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Unexpected error in getRefCode:', error);
+      throw new BadRequestException('Could not fetch referral code');
+    }
+  }
+
+  @Get('referral/stats')
+  async getReferralStats(@Request() req) {
+    return await this.users.getReferralStats(req.user.wallet);
+  }
+
+  @Get('profile')
+  async getProfile(@Request() req) {
+    const wallet = req.user.wallet;
+    return this.users.getProfile(wallet);
+  }
 }
