@@ -122,7 +122,7 @@ export class HorseController {
 
 
 
-  @UseGuards(JwtAuthGuard)
+/*   @UseGuards(JwtAuthGuard)
   @Put(':tokenId/consume')
   async consumeItem(
     @Param('tokenId') tokenId: string,
@@ -138,7 +138,7 @@ export class HorseController {
       tokenId,
       body.itemName,
     );
-  }
+  } */
 
   @Get('next-energy-recovery')
   getNextEnergyRecovery() {

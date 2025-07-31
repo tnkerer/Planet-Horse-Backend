@@ -100,7 +100,7 @@ export const items = {
         "src": "ronke",
         "description": "Reduce race cost by 3 energy. A plush trophy to celebrate your victory!",
         "breakable": false,
-        "consumable": false,
+        "consumable": true,
         "uses": 1,
         "chainId": 10000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeibv5xrrvpblewknapabtevnm33poi2i32b3ypuz4qh7xz2dr4kpd4'
