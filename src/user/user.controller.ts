@@ -238,4 +238,10 @@ export class UserController {
     const wallet = req.user.wallet;
     return this.users.getProfile(wallet);
   }
+
+  @Post('set-referred-by')
+  async setReferredBy(@Request() req, @Body('refCode') refCode: string) {
+    const wallet = req.user.wallet; // Or however you're getting current user
+    return this.users.setReferredBy(wallet, refCode);
+  }
 }

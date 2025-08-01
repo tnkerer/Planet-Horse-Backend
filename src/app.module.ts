@@ -68,6 +68,7 @@ export class AppModule implements NestModule {
         { path: 'user/item-withdraw', method: RequestMethod.POST },
         { path: 'user/link-discord', method: RequestMethod.POST },
         { path: 'user/ref-code', method: RequestMethod.POST },
+        { path: 'user/set-referred-by', method: RequestMethod.POST},
         { path: 'horses/*', method: RequestMethod.PUT },
       )
       .forRoutes('*')

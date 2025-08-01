@@ -960,10 +960,23 @@ export class UserService {
         const user = await this.prisma.user.findUnique({
             where: { wallet },
             select: {
+                id: true,
                 xp: true,
                 referralLevel: true,
-                referrals: true,
-                referralPhorseEarned: true, // NEW
+                referrals: {
+                    select: {
+                        wallet: true,
+                        updatedAt: true,
+                        discordTag: true,
+                        refCode: true,
+                    },
+                },
+                referralPhorseEarned: true,
+                referredBy: {
+                    select: {
+                        refCode: true,
+                    },
+                },
             },
         });
 
@@ -977,14 +990,83 @@ export class UserService {
             ? nextLevel.cumulativeXP
             : currentLevel?.cumulativeXP || user.xp;
 
+        // Build the list of referred players
+        const referredPlayers = user.referrals.map((ref) => {
+            // Determine the display name
+            let displayName = ref.discordTag || ref.refCode || null;
+            if (!displayName) {
+                // fallback to wallet address (last 24 characters)
+                displayName = `0x${ref.wallet.slice(24)}...`;
+            }
+
+            let active;
+            // Determine active status
+            if (ref.updatedAt) {
+                const lastUpdated = ref.updatedAt.getTime();
+                const daysOld = (Date.now() - lastUpdated) / (1000 * 60 * 60 * 24);
+                active = daysOld <= 3; // active if updatedAt is within 3 days
+            } else active = false;
+
+            return {
+                displayName,
+                active,
+            };
+        });
+
         return {
             totalReferrals: user.referrals.length,
-            activeReferrals: user.referrals.length,
-            totalEarned: user.referralPhorseEarned, // changed to referral earnings only
+            activeReferrals: referredPlayers.filter((p) => p.active).length,
+            totalEarned: user.referralPhorseEarned,
             level: user.referralLevel,
             xp: user.xp,
             xpForNextLevel,
+            referredByRefCode: user.referredBy?.refCode || null,
+            referredPlayers, // NEW ARRAY
         };
     }
 
+
+    async setReferredBy(wallet: string, refCode: string) {
+        // 1. Find the referrer by refCode
+        const referrer = await this.prisma.user.findUnique({
+            where: { refCode },
+            select: { id: true },
+        });
+
+        if (!referrer) {
+            throw new NotFoundException(`Referral code "${refCode}" does not exist`);
+        }
+
+        // 2. Check the current user
+        const user = await this.prisma.user.findUnique({
+            where: { wallet },
+            select: { id: true, referredById: true },
+        });
+
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
+
+        // 3. Ensure the user doesn't already have a referredBy set
+        if (user.referredById) {
+            throw new BadRequestException('You have already been referred by someone');
+        }
+
+        // 4. Prevent self-referral
+        if (user.id === referrer.id) {
+            throw new BadRequestException('You cannot refer yourself');
+        }
+
+        // 5. Update user with referredById
+        await this.prisma.user.update({
+            where: { id: user.id },
+            data: {
+                referredById: referrer.id,
+            },
+        });
+
+        return {
+            message: `Successfully set referredBy using referral code "${refCode}"`,
+        };
+    }
 }
