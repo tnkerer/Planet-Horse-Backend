@@ -82,6 +82,7 @@ model Horse {
   currentSpeed  Int
   currentEnergy Int
   maxEnergy     Int
+  foodUsed      Int       @default(0) // NEW COLUMN
   equipments    Item[]
   lastRace      DateTime?
   lastEnergy    DateTime?
@@ -93,6 +94,7 @@ model Horse {
 
   @@index([ownerId])
 }
+
 
 model Item {
   id        String    @id @default(uuid())

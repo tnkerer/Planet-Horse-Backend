@@ -133,12 +133,11 @@ export class HorseController {
     if (!body.itemName || typeof body.itemName !== 'string') {
       throw new BadRequestException(`"itemName" must be a nonempty string`);
     }
-/*     return this.horseService.consumeItem(
+    return this.horseService.consumeItem(
       callerWallet,
       tokenId,
       body.itemName,
-    ); */
-    throw new BadRequestException('This feature is currently disabled!');
+    );
   }
 
   @Get('next-energy-recovery')

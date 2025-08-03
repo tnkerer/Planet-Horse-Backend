@@ -840,45 +840,34 @@ export class HorseService {
     horseTokenId: string;
     updatedFields: Record<string, number>;
     remainingQuantityOfThatItem: number;
+    foodUsed: number; // NEW
   }> {
     return await this.prisma.$transaction(async (tx) => {
-      // ─────────────────────────────────────────────────────────────────────
-      // 1) Look up the user record by wallet
+      // 1) Fetch user
       const callerUser = await tx.user.findUnique({
         where: { wallet: callerWallet },
         select: { id: true },
       });
       if (!callerUser) {
-        throw new NotFoundException(
-          'Authenticated user not found in database'
-        );
+        throw new NotFoundException('Authenticated user not found in database');
       }
+
       const callerUserId = callerUser.id;
 
-      // ─────────────────────────────────────────────────────────────────────
-      // 2) Ensure the item exists and is consumable
+      // 2) Ensure item exists & is consumable
       const itemDef = (allItems as Record<string, any>)[itemName];
-      if (!itemDef) {
-        throw new BadRequestException(`Item "${itemName}" does not exist`);
-      }
-      if (itemDef.consumable !== true) {
-        throw new BadRequestException(
-          `Item "${itemName}" is not consumable`
-        );
-      }
+      if (!itemDef) throw new BadRequestException(`Item "${itemName}" does not exist`);
+      if (itemDef.consumable !== true)
+        throw new BadRequestException(`Item "${itemName}" is not consumable`);
 
-      // The `property` object might contain e.g. { currentEnergy: 3 } or { currentPower: 2, currentSpeed: 1 }, etc.
       const property: Record<string, number> = itemDef.property ?? {};
       if (Object.keys(property).length === 0) {
-        throw new BadRequestException(
-          `Consumable "${itemName}" has no valid "property" to apply`
-        );
+        throw new BadRequestException(`Consumable "${itemName}" has no valid "property"`);
       }
 
-      // ─────────────────────────────────────────────────────────────────────
-      // 3) Find the horse by tokenId, validate ownership
+      // 3) Find the horse
       const horse = await tx.horse.findUnique({
-        where: { tokenId: tokenId },
+        where: { tokenId },
         select: {
           id: true,
           tokenId: true,
@@ -889,57 +878,44 @@ export class HorseService {
           currentSprint: true,
           currentSpeed: true,
           status: true,
-          equipments: true
-          // (if you add other integer fields later, include them in select)
+          equipments: true,
+          foodUsed: true, // SELECT foodUsed
         },
       });
-      if (!horse) {
-        throw new NotFoundException(`Horse with tokenId=${tokenId} not found`);
-      }
-      if (horse.ownerId !== callerUserId) {
+      if (!horse) throw new NotFoundException(`Horse ${tokenId} not found`);
+      if (horse.ownerId !== callerUserId)
         throw new BadRequestException(`You do not own horse #${tokenId}`);
-      }
 
-      // ─────────────────────────────────────────────────────────────────────
-      // 4) Find exactly one Item row (of that name) owned by this user
-      const oneItem = await tx.item.findFirst({
-        where: {
-          ownerId: callerUserId,
-          name: itemName,
-        },
-        select: { id: true },
-      });
-      if (!oneItem) {
-        throw new NotFoundException(
-          `You do not own any "${itemName}" consumables`
+      // 4) Limit food items (currentEnergy)
+      if (property.currentEnergy !== undefined && horse.foodUsed >= 3) {
+        throw new BadRequestException(
+          `You have reached the limit of 3 food items until next recovery.`
         );
       }
 
-      // ─────────────────────────────────────────────────────────────────────
-      // 5) Prepare the “updateData” object by looping over each key in property.
-      //
-      //    If the key is "currentEnergy", we cap at maxEnergy;
-      //    otherwise, we simply do: newValue = oldValue + increment.
+      // 5) Find one instance of the item
+      const oneItem = await tx.item.findFirst({
+        where: { ownerId: callerUserId, name: itemName },
+        select: { id: true },
+      });
+      if (!oneItem)
+        throw new NotFoundException(`You do not own any "${itemName}" consumables`);
+
+      // 6) Apply updates to horse stats
       const updateData: Record<string, any> = {};
       const updatedFields: Record<string, number> = {};
 
       for (const [fieldName, incValue] of Object.entries(property)) {
-        // Validate that the horse indeed has that field and it is numeric.
         if (!(fieldName in horse)) {
-          throw new BadRequestException(
-            `Horse model has no field "${fieldName}" to update`
-          );
+          throw new BadRequestException(`Horse has no field "${fieldName}"`);
         }
+
         const oldValue = (horse as any)[fieldName] as number;
         if (typeof oldValue !== 'number') {
-          throw new BadRequestException(
-            `Horse field "${fieldName}" is not numeric and cannot be incremented`
-          );
+          throw new BadRequestException(`Horse field "${fieldName}" is not numeric`);
         }
 
         const baseEnergy = globals['Energy Spent'] as number;
-
-        // Aggregate modifiers from equipped items
         const equippedModifiers = horse.equipments
           .map((item) => itemModifiers[item.name])
           .filter(Boolean);
@@ -956,64 +932,52 @@ export class HorseService {
 
         const energySpent = baseEnergy - totalModifier.energySaved;
 
-
         if (fieldName === 'currentEnergy') {
-          // cap at maxEnergy
           let newEnergy = oldValue + incValue;
-          if (newEnergy > horse.maxEnergy) {
-            newEnergy = horse.maxEnergy;
-          }
+          if (newEnergy > horse.maxEnergy) newEnergy = horse.maxEnergy;
           if (newEnergy >= energySpent && horse.status === 'SLEEP') {
-            updateData.status = Status.IDLE
+            updateData.status = Status.IDLE;
           }
           updateData.currentEnergy = newEnergy;
           updatedFields.currentEnergy = newEnergy;
+
+          // Increment foodUsed only when currentEnergy item is used
+          updateData.foodUsed = horse.foodUsed + 1;
         } else {
-          // for any other INT field (currentPower, currentSprint, etc.)
           const newValue = oldValue + incValue;
           updateData[fieldName] = newValue;
           updatedFields[fieldName] = newValue;
         }
       }
 
-      // ─────────────────────────────────────────────────────────────────────
-      // 6) Perform the horse update
+      // 7) Update horse
       const updatedHorse = await tx.horse.update({
-        where: { tokenId: tokenId },
+        where: { tokenId },
         data: updateData,
         select: {
           tokenId: true,
-          // Return each updated field so the controller can send it back
           currentEnergy: true,
           maxEnergy: true,
           currentPower: true,
           currentSprint: true,
           currentSpeed: true,
-          // (include any other INT fields you might have)
+          foodUsed: true, // RETURN foodUsed
         },
       });
 
-      // ─────────────────────────────────────────────────────────────────────
-      // 7) Delete exactly one item row (the “used” consumable)
-      await tx.item.delete({
-        where: { id: oneItem.id },
-      });
+      // 8) Delete used item
+      await tx.item.delete({ where: { id: oneItem.id } });
 
-      // ─────────────────────────────────────────────────────────────────────
-      // 8) Count how many of that consumable remain for the user:
+      // 9) Count leftover
       const leftoverCount = await tx.item.count({
-        where: {
-          ownerId: callerUserId,
-          name: itemName,
-        },
+        where: { ownerId: callerUserId, name: itemName },
       });
 
-      // ─────────────────────────────────────────────────────────────────────
-      // 9) Return a summary object
       return {
         horseTokenId: tokenId,
-        updatedFields: updatedFields,
+        updatedFields,
         remainingQuantityOfThatItem: leftoverCount,
+        foodUsed: updatedHorse.foodUsed, // NEW
       };
     });
   }
@@ -1051,83 +1015,119 @@ export class HorseService {
     tokenId: string,
     dto: EquipItemDto,
   ): Promise<{ success: true }> {
-    // (1) Look up userId from wallet:
-    const userId = await this.findUserIdByWallet(ownerWallet);
+    return this.prisma.$transaction(async (tx) => {
+      // (1) Find user by wallet
+      const userId = await this.findUserIdByWallet(ownerWallet);
+      if (!userId) {
+        throw new ForbiddenException('Invalid user wallet.');
+      }
 
-    // (2) Look up the horse by tokenId, ensure ownerId === userId:
-    const horse = await this.prisma.horse.findUnique({
-      where: { tokenId },
-      select: {
-        id: true,
-        ownerId: true,
-        level: true,
-        equipments: {
-          select: { id: true },
+      // (2) Lock the horse and check ownership
+      const horse = await tx.horse.findUnique({
+        where: { tokenId },
+        select: {
+          id: true,
+          ownerId: true,
+          level: true,
+          currentEnergy: true,
+          status: true,
+          equipments: {
+            select: { id: true, name: true },
+          },
         },
-      },
-    });
-    if (!horse) {
-      throw new NotFoundException(`Horse ${tokenId} not found`);
-    }
-    if (horse.ownerId !== userId) {
-      throw new ForbiddenException(`You do not own horse ${tokenId}`);
-    }
-
-    // (3) Determine how many items the horse is allowed to have equipped:
-    const currentlyEquippedCount = horse.equipments.length;
-    let maxSlots = 0;
-    if (horse.level >= 15) maxSlots = 3;
-    else if (horse.level >= 7) maxSlots = 2;
-    else if (horse.level >= 2) maxSlots = 1;
-    else maxSlots = 0;
-
-    if (currentlyEquippedCount >= maxSlots) {
-      throw new BadRequestException(
-        `Horse level ${horse.level} allows only ${maxSlots} item(s) equipped`,
-      );
-    }
-
-    // (4) Find the first matching Item row:
-    const matchingItem = await this.prisma.item.findFirst({
-      where: {
-        ownerId: userId,
-        name: dto.name,
-        uses: dto.usesLeft,
-        equipedBy: null, // not already equipped to any horse
-      },
-      orderBy: { createdAt: 'asc' }, // “take the oldest one first”
-    });
-    if (!matchingItem) {
-      throw new NotFoundException(
-        `No available item "${dto.name}" with ${dto.usesLeft} uses found in your bag`,
-      );
-    }
-
-    // (5) In a short transaction, update that item → equipedBy = horse.id:
-    await this.prisma.$transaction(async (tx) => {
-      // double‐check that the item is still un‐equipped & owned by the user:
-      const fresh = await tx.item.findUnique({
-        where: { id: matchingItem.id },
-        select: { equipedBy: true, ownerId: true },
       });
-      if (!fresh) {
-        throw new NotFoundException(`Item no longer exists`);
+
+      if (!horse) {
+        throw new NotFoundException(`Horse ${tokenId} not found.`);
       }
-      if (fresh.ownerId !== userId) {
-        throw new ForbiddenException(`You do not own that item anymore`);
+      if (horse.ownerId !== userId) {
+        throw new ForbiddenException(`You do not own horse ${tokenId}.`);
       }
-      if (fresh.equipedBy !== null) {
-        throw new BadRequestException(`That item is already equipped`);
+
+      // (3) Validate slot rules (trophies vs non-trophies)
+      const isTrophy = allItems[dto.name]?.trophy === true;
+      const equippedItems = horse.equipments;
+
+      const trophiesEquipped = equippedItems.filter(
+        (e) => allItems[e.name]?.trophy,
+      ).length;
+      const nonTrophiesEquipped = equippedItems.length - trophiesEquipped;
+
+      if (isTrophy) {
+        if (trophiesEquipped >= 1) {
+          throw new BadRequestException(
+            `Only one trophy can be equipped at a time.`,
+          );
+        }
+      } else {
+        let maxSlots = 0;
+        if (horse.level >= 15) maxSlots = 3;
+        else if (horse.level >= 7) maxSlots = 2;
+        else if (horse.level >= 2) maxSlots = 1;
+
+        if (nonTrophiesEquipped >= maxSlots) {
+          throw new BadRequestException(
+            `Horse level ${horse.level} allows only ${maxSlots} non-trophy item(s).`,
+          );
+        }
       }
-      // finally, attach to horse:
+
+      // (4) Find a matching un-equipped item
+      const matchingItem = await tx.item.findFirst({
+        where: {
+          ownerId: userId,
+          name: dto.name,
+          uses: dto.usesLeft,
+          equipedBy: null,
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (!matchingItem) {
+        throw new NotFoundException(
+          `No available item "${dto.name}" with ${dto.usesLeft} uses found.`,
+        );
+      }
+
+      // (5) Attach item to horse and update energy/status atomically
       await tx.item.update({
         where: { id: matchingItem.id },
         data: { horseId: horse.id },
       });
-    });
 
-    return { success: true };
+      // Fetch updated equipment (including this newly equipped item)
+      const updatedEquipments = [...equippedItems, { name: dto.name }];
+
+      const baseEnergy = globals['Energy Spent'] as number;
+
+      const totalModifier = updatedEquipments
+        .map((e) => itemModifiers[e.name])
+        .filter(Boolean)
+        .reduce(
+          (acc, mod) => ({
+            positionBoost: acc.positionBoost * mod.positionBoost,
+            hurtRate: acc.hurtRate * mod.hurtRate,
+            xpMultiplier: acc.xpMultiplier * mod.xpMultiplier,
+            energySaved: acc.energySaved + mod.energySaved,
+          }),
+          { positionBoost: 1, hurtRate: 1, xpMultiplier: 1, energySaved: 0 },
+        );
+
+      const energySpent = Math.max(1, baseEnergy - totalModifier.energySaved);
+      const newStatus = horse.currentEnergy >= energySpent ? 'IDLE' : 'SLEEP';
+
+      // Update horse status if it changed
+      if (horse.status !== newStatus) {
+        await tx.horse.update({
+          where: { id: horse.id },
+          data: { status: newStatus },
+        });
+      }
+
+      return { success: true };
+    });
   }
+
 
   /**
    * 1) Verify user → horse ownership (same as above).
@@ -1141,66 +1141,101 @@ export class HorseService {
     tokenId: string,
     dto: UnequipItemDto,
   ): Promise<{ success: true }> {
-    // (1) Find userId from wallet:
-    const userId = await this.findUserIdByWallet(ownerWallet);
+    return this.prisma.$transaction(async (tx) => {
+      // (1) Validate user from wallet
+      const userId = await this.findUserIdByWallet(ownerWallet);
+      if (!userId) {
+        throw new ForbiddenException('Invalid user wallet.');
+      }
 
-    // (2) Look up the horse and confirm ownership:
-    const horse = await this.prisma.horse.findUnique({
-      where: { tokenId },
-      select: {
-        id: true,
-        ownerId: true,
-        equipments: {
-          where: { name: dto.name, horseId: { not: null } },
-          select: { id: true, updatedAt: true },
-          orderBy: { createdAt: 'asc' },
-          take: 1,
+      // (2) Lock the horse record to avoid race conditions (atomicity)
+      const horse = await tx.horse.findUnique({
+        where: { tokenId },
+        select: {
+          id: true,
+          ownerId: true,
+          currentEnergy: true,
+          status: true,
+          equipments: {
+            where: { name: dto.name, horseId: { not: null } },
+            select: { id: true, updatedAt: true, name: true, breakable: true },
+            orderBy: { createdAt: 'asc' },
+            take: 1,
+          },
         },
-      },
-    });
-    if (!horse) {
-      throw new NotFoundException(`Horse ${tokenId} not found`);
-    }
-    if (horse.ownerId !== userId) {
-      throw new ForbiddenException(`You do not own horse ${tokenId}`);
-    }
+      });
 
-    // (3) Did the horse have any item with that name currently equipped?
-    if (horse.equipments.length === 0) {
-      throw new BadRequestException(
-        `Horse has no item named "${dto.name}" currently equipped!`,
-      );
-    }
-    const { id, updatedAt } = horse.equipments[0];
+      if (!horse) {
+        throw new NotFoundException(`Horse ${tokenId} not found.`);
+      }
+      if (horse.ownerId !== userId) {
+        throw new ForbiddenException(`You do not own horse ${tokenId}.`);
+      }
 
-    const thisItem = await this.prisma.item.findUnique({
-      where: { id: id },
-      select: { breakable: true }
-    })
-
-    if (!thisItem) {
-      throw new NotFoundException(`Cannot find target item`)
-    }
-
-    if (!thisItem.breakable) {
-      const SIX_HOURS = 6 * 60 * 60 * 1000;
-      if (updatedAt && Date.now() - updatedAt.getTime() < SIX_HOURS) {
-        const minsLeft = Math.ceil((SIX_HOURS - (Date.now() - updatedAt.getTime())) / 60000);
+      // (3) Validate equipment exists
+      const equipment = horse.equipments[0];
+      if (!equipment) {
         throw new BadRequestException(
-          `You can only unequip this item 6 hours after its last change. ` +
-          `Please wait another ${minsLeft} minute(s).`,
+          `Horse has no item named "${dto.name}" currently equipped.`,
         );
       }
-    }
 
-    // (4) Detach in one simple update:
-    await this.prisma.item.update({
-      where: { id: id },
-      data: { horseId: null },
+      // (4) Check unequip cooldown for non-breakable items (trophies)
+      if (!equipment.breakable) {
+        const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+        const now = Date.now();
+        const lastUpdate = equipment.updatedAt?.getTime() ?? 0;
+        if (now - lastUpdate < SIX_HOURS_MS) {
+          const minsLeft = Math.ceil((SIX_HOURS_MS - (now - lastUpdate)) / 60000);
+          throw new BadRequestException(
+            `You can only unequip this item 6 hours after its last change. ` +
+            `Please wait another ${minsLeft} minute(s).`,
+          );
+        }
+      }
+
+      // (5) Detach the item (set horseId = null)
+      await tx.item.update({
+        where: { id: equipment.id },
+        data: { horseId: null },
+      });
+
+      // (6) Recalculate horse status based on remaining equipment modifiers
+      // Fetch remaining equipments after unequip for accurate calculation
+      const remainingEquipments = await tx.item.findMany({
+        where: { horseId: horse.id },
+        select: { name: true },
+      });
+
+      const baseEnergy = globals['Energy Spent'] as number;
+      const totalModifier = remainingEquipments
+        .map((e) => itemModifiers[e.name])
+        .filter(Boolean)
+        .reduce(
+          (acc, mod) => ({
+            positionBoost: acc.positionBoost * mod.positionBoost,
+            hurtRate: acc.hurtRate * mod.hurtRate,
+            xpMultiplier: acc.xpMultiplier * mod.xpMultiplier,
+            energySaved: acc.energySaved + mod.energySaved,
+          }),
+          { positionBoost: 1, hurtRate: 1, xpMultiplier: 1, energySaved: 0 },
+        );
+
+      const energySpent = Math.max(1, baseEnergy - totalModifier.energySaved);
+      const newStatus = horse.currentEnergy >= energySpent ? 'IDLE' : 'SLEEP';
+
+      // Only update status if it changes
+      if (horse.status !== newStatus) {
+        await tx.horse.update({
+          where: { id: horse.id },
+          data: { status: newStatus },
+        });
+      }
+
+      return { success: true };
     });
-
-    return { success: true };
   }
+
 
   async getRaceHistoryByHorseId(horseId: string, userId: string) {
     const horse = await this.prisma.horse.findFirst({

@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Horse" ADD COLUMN     "foodUsed" INTEGER NOT NULL DEFAULT 0;

@@ -100,7 +100,8 @@ export const items = {
         "src": "ronke",
         "description": "Reduce race cost by 3 energy. A plush trophy to celebrate your victory!",
         "breakable": false,
-        "consumable": true,
+        "consumable": false,
+        "trophy": true,
         "uses": 1,
         "chainId": 10000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeibv5xrrvpblewknapabtevnm33poi2i32b3ypuz4qh7xz2dr4kpd4'
@@ -111,6 +112,7 @@ export const items = {
         "description": "Reduce race cost by 1 energy. A plush trophy to celebrate your engagement!",
         "breakable": false,
         "consumable": false,
+        "trophy": true,
         "uses": 1,
         "chainId": 10001,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeigv34beezol4uz24n3meosxm4lvsawlbpwjx5r3qyxtehkfy3n4xe'
@@ -121,6 +123,7 @@ export const items = {
         "description": "Increase drop rate of items ingame by 15%",
         "breakable": false,
         "consumable": false,
+        "trophy": true,
         "uses": 1,
         "chainId": 10002,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeih5qlajvf4wqbmxvhcfewnkgizd4wrjdbi7y7chmcv4xusgwz6zvy'

@@ -80,7 +80,14 @@ export class EnergyRecoveryService {
     AND "currentEnergy" < "maxEnergy";
 `;
 
-      this.logger.debug('✅ 6-hour energy-recovery SQL completed successfully.');
+      // 2) New: decrement foodUsed if > 0
+      await this.prisma.$executeRaw`
+      UPDATE "Horse"
+      SET "foodUsed" = "foodUsed" - 1
+      WHERE "foodUsed" > 0;
+    `;
+
+      this.logger.debug('✅ 6-hour energy & foodUsed recovery completed.');
     } catch (err: any) {
       this.logger.error(
         `❌ EnergyRecovery SQL failed: ${err.message}`,
