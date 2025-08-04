@@ -6,7 +6,7 @@ import { chestsPercentage, items } from '../data/items';
 import { globals } from 'src/data/globals';
 import { getWithdrawUserPct, withdrawTaxConfig } from './withdraw-tax';
 import { HorseService } from 'src/horse/horse.service';
-import { itemUpgradeCost, successRate } from 'src/data/item_progression';
+import { itemUpgradeCost, successRate, upgradePoints } from 'src/data/item_progression';
 import { randomBytes } from 'crypto';
 
 @Injectable()
@@ -523,6 +523,16 @@ export class UserService {
                     data: { name: nextName },
                 });
                 finalItemId = upgraded.id;
+
+                // **Increment upgradeScore based on upgradePoints**
+                const points = upgradePoints[nextLevel.toString()] ?? 0;
+                if (points > 0) {
+                    await tx.user.update({
+                        where: { id: user.id },
+                        data: { upgradeScore: { increment: points } }
+                    });
+                }
+
             } else if (willBreak) {
                 // delete the broken item
                 await tx.item.delete({ where: { id: target.id } });

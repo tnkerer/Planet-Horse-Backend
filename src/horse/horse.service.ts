@@ -1067,7 +1067,7 @@ export class HorseService {
 
         if (nonTrophiesEquipped >= maxSlots) {
           throw new BadRequestException(
-            `Horse level ${horse.level} allows only ${maxSlots} non-trophy item(s).`,
+            `Horse level ${horse.level} allows only ${maxSlots} non trophy item(s).`,
           );
         }
       }

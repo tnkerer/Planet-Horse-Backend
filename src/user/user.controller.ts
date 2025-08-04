@@ -92,7 +92,7 @@ export class UserController {
     @Body() dto: UpgradeItemDto
   ) {
     if (typeof dto.name !== 'string' || !dto.name.trim()) {
-      throw new BadRequestException('Request body must include a non-empty "name"');
+      throw new BadRequestException('Request body must include a non empty "name"');
     }
 
     const updatedItem = await this.users.upgradeItem(

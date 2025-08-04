@@ -43,6 +43,8 @@ model User {
   xp             Int             @default(0)
   referralLevel  Int             @default(1)
   referralPhorseEarned Float @default(0)
+  // Upgrade Score
+  upgradeScore   Int             @default(0)
 }
 
 model ReferralXPLog {
