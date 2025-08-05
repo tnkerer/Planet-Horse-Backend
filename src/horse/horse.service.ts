@@ -1114,7 +1114,13 @@ export class HorseService {
         );
 
       const energySpent = Math.max(1, baseEnergy - totalModifier.energySaved);
-      const newStatus = horse.currentEnergy >= energySpent ? 'IDLE' : 'SLEEP';
+      
+      let newStatus;
+      if (horse.status === 'IDLE') {
+        newStatus = horse.currentEnergy >= energySpent ? 'IDLE' : 'SLEEP';
+      } else {
+        newStatus = horse.status
+      }
 
       // Update horse status if it changed
       if (horse.status !== newStatus) {
@@ -1222,7 +1228,13 @@ export class HorseService {
         );
 
       const energySpent = Math.max(1, baseEnergy - totalModifier.energySaved);
-      const newStatus = horse.currentEnergy >= energySpent ? 'IDLE' : 'SLEEP';
+
+      let newStatus;
+      if (horse.status === 'IDLE') {
+        newStatus = horse.currentEnergy >= energySpent ? 'IDLE' : 'SLEEP';
+      } else {
+        newStatus = horse.status
+      }
 
       // Only update status if it changes
       if (horse.status !== newStatus) {
