@@ -25,6 +25,29 @@ export const items = {
         "chainId": 2000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeieyjcwjc5lhzh2gelbsogmnfeof4bc63aghs444epbczycol26r5a'
     },
+    "Rice Bowl": {
+        "name": "Rice Bowl",
+        "src": "rice",
+        "description": "A bowl of rice. Do horses eat rice? Yes! Will recover 2 energy instantly.",
+        "breakable": true,
+        "consumable": true,
+        "uses": 1,
+        "property": {
+            "currentEnergy": 2
+        },
+        "chainId": 14000,
+        "chainSrc": 'https://ipfs.io/ipfs/bafybeievbvn5xoa7m36h67i4ijufqz3xtq4cdhsy6srbahjjsgy33ftkra'
+    },
+    "Rice Sack": {
+        "name": "Rice Sack",
+        "src": "sack",
+        "description": "A rice sack from a foreign land. Can be traded for $RICE. ",
+        "breakable": false,
+        "consumable": false,
+        "uses": 1,
+        "chainId": 14001,
+        "chainSrc": 'https://ipfs.io/ipfs/bafybeibxnl3wu4k6yxvdhkqzxa7wq46zco2eoy2leepalj3l6gmcn6gqgu'
+    },
     "Common Saddle": {
         "name": "Common Saddle",
         "src": "saddle",
@@ -127,6 +150,28 @@ export const items = {
         "uses": 1,
         "chainId": 10002,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeih5qlajvf4wqbmxvhcfewnkgizd4wrjdbi7y7chmcv4xusgwz6zvy'
+    },
+    "Ronke Farmer Trophy": {
+        "name": "Ronke Farmer Trophy",
+        "src": "farmer",
+        "description": "Horses can drop Rice Bowl and Rice Sacks",
+        "breakable": false,
+        "consumable": false,
+        "trophy": true,
+        "uses": 1,
+        "chainId": 10003,
+        "chainSrc": 'https://ipfs.io/ipfs/bafybeifvo6umshx5uyz4i2w6j3zfpacgwzqxgvyhwgv7f2cv2du4j7oxzu'
+    },
+    "Baby Horse Trophy": {
+        "name": "Baby Horse Trophy",
+        "src": "horsie",
+        "description": "Reduce race cost by 1 energy. A plush trophy to celebrate your engagement!",
+        "breakable": false,
+        "consumable": false,
+        "trophy": true,
+        "uses": 1,
+        "chainId": 10004,
+        "chainSrc": 'https://ipfs.io/ipfs/bafybeifl7o34ku3fwrbuiwunfo6fyrumeoubr3vkm3eyjzfgdrv5ervfqy'
     },
     "Champion Saddle Pad": {
         "name": "Champion Saddle Pad",
@@ -1052,6 +1097,24 @@ export const itemModifiers = {
         extraSpt: 0,
         extraPwr: 0,
     },
+    "Ronke Farmer Trophy": {
+        positionBoost: 1,
+        hurtRate: 1,
+        xpMultiplier: 1,
+        energySaved: 0,
+        extraSpd: 0,
+        extraSpt: 0,
+        extraPwr: 0,
+    },
+    "Baby Horse Trophy": {
+        positionBoost: 1,
+        hurtRate: 1,
+        xpMultiplier: 1,
+        energySaved: 1,
+        extraSpd: 0,
+        extraSpt: 0,
+        extraPwr: 0,
+    },
     "Rollie the Bunny": {
         positionBoost: 1,
         hurtRate: 1,
@@ -1105,6 +1168,52 @@ export const itemModifiers = {
         extraSpd: 0,
         extraSpt: 0,
         extraPwr: 0,
+    },
+    "Krambee The Goat" : {
+        positionBoost: 1,
+        hurtRate: 1,
+        xpMultiplier: 1,
+        energySaved: 0,
+        extraSpd: 0,
+        extraSpt: 0,
+        extraPwr: 0,
+        dropsBoost: 1.25
+    }
+}
+
+export const itemDrops = {
+    5: { // If horse is level is 5 or higher
+        "Hay": 5,  // Adds 5% chance of dropping this item
+        "Pumpers": 5, // Adds 5% chance of dropping this item
+        "Big Hay Bale": 1, // Adds 1% chance of dropping this item
+    },
+    10: { // If horse is level is 10 or higher
+        "Big Hay Bale": 1, // Adds 1% chance of dropping this item
+        "Baby Horse Trophy": 0.05, // Adds 0.05% chance of dropping this item
+        "Champion Bridle +3": 0.1, // Adds 0.1% chance of dropping this item
+        "Champion Saddle Pad +3": 0.1, // Adds 0.1% chance of dropping this item
+        "Champion Stirrups +3": 0.1 // Adds 0.1% chance of dropping this item
+    },
+    15: { // If horse is level is 15 or higher
+        "Baby Horse Trophy": 0.5, // Adds 0.5% chance of dropping this item
+        "Champion Bridle +6": 0.1, // Adds 0.1% chance of dropping this item
+        "Champion Saddle Pad +6": 0.1, // Adds 0.1% chance of dropping this item
+        "Champion Stirrups +6": 0.1 // Adds 0.1% chance of dropping this item
+    }
+}
+
+export const chestDrops = {
+    5: { // Level Threshold
+        1: 5, // Drop percetage of chest type 1 adds 5%
+        2: 0 // Drop percetage of chest type 2 adds 0%
+    },
+    10: { // Level Threshold
+        1: 5, // Drop percetage of chest type 1 adds 5%
+        2: 3 // Drop percetage of chest type 2 adds 3%
+    },
+    15: {
+        1: 5, // Drop percetage of chest type 1 adds 8%
+        2: 5 // Drop percetage of chest type 2 adds 5%
     }
 }
 
@@ -1112,12 +1221,12 @@ export const chests = {
     1: {
         "paused": false,
         "price": 500,
-        "discountedPrice" : 450
+        "discountedPrice": 450
     },
     2: {
         "paused": false,
         "price": 2000,
-        "discountedPrice" : 1800
+        "discountedPrice": 1800
     }
 }
 

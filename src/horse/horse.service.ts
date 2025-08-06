@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { globals } from '../data/globals';
-import { items as allItems, itemModifiers } from '../data/items';
+import { items as allItems, itemModifiers, itemDrops, chestDrops } from '../data/items';
 import { xpProgression, levelLimits } from '../data/xp_progression';
 import { lvlUpFee } from '../data/lvl_up_fee';
 import { rarityBase } from '../data/rarity_base';
@@ -504,12 +504,70 @@ export class HorseService {
         },
       });
 
+      // ITEM DROP LOGIC
+      const dropsBoost = horse.equipments
+        .map(i => itemModifiers[i.name]?.dropsBoost ?? 1)
+        .reduce((acc, m) => acc * m, 1);
+
+      // ─── build cumulative drop tables ────────────────────────────────────────────
+      const itemTable: Record<string, number> = {};
+      for (const [thr, drops] of Object.entries(itemDrops) as [string, Record<string, number>][]) {
+        if (horse.level >= Number(thr)) {
+          for (const [name, pct] of Object.entries(drops)) {
+            itemTable[name] = (itemTable[name] ?? 0) + pct;
+          }
+        }
+      }
+
+      const chestTable: Record<number, number> = {};
+      for (const [thr, drops] of Object.entries(chestDrops) as [string, Record<string, number>][]) {
+        if (horse.level >= Number(thr)) {
+          for (const [typeStr, pct] of Object.entries(drops)) {
+            const t = Number(typeStr);
+            chestTable[t] = (chestTable[t] ?? 0) + pct;
+          }
+        }
+      }
+
+      // ─── perform boosted rolls & persist ──────────────────────────────────────────
+      const droppedItems: string[] = [];
+      for (const [name, pct] of Object.entries(itemTable)) {
+        if (Math.random() * 100 < pct * dropsBoost) {
+          droppedItems.push(name);
+          const def = allItems[name];
+          await tx.item.create({
+            data: {
+              ownerId: user.id,
+              name,
+              value: 1,
+              breakable: def.breakable,
+              uses: def.breakable ? def.uses : null,
+            },
+          });
+        }
+      }
+
+      const droppedChests: number[] = [];
+      for (const [chType, pct] of Object.entries(chestTable).map(([k, v]) => [Number(k), v] as [number, number])) {
+        if (Math.random() * 100 < pct * dropsBoost) {
+          droppedChests.push(chType);
+          await tx.chest.upsert({
+            where: { ownerId_chestType: { ownerId: user.id, chestType: chType } },
+            create: { ownerId: user.id, chestType: chType, quantity: 1 },
+            update: { quantity: { increment: 1 } },
+          });
+        }
+      }
+
+      // ─── return everything ──────────────────────────────────────────────────────
       return {
         xpReward,
         tokenReward,
         medalReward,
         position,
         finalStatus,
+        droppedItems,
+        droppedChests,
       };
     });
   }
@@ -517,208 +575,273 @@ export class HorseService {
   /**
    * startMultipleRace:
    *  - Runs race logic for multiple tokenIds in one transaction.
+   *  - Batches writes for performance.
    */
-  async startMultipleRace(
-    ownerWallet: string,
-    tokenIds: string[],
-  ): Promise<Array<{
-    tokenId: string;
-    xpReward: number;
-    tokenReward: number;
-    medalReward: number;
-    position: number;
-    finalStatus: 'IDLE' | 'SLEEP' | 'BRUISED';
-  }>> {
-    return this.prisma.$transaction(async (tx) => {
-      // 1) Load user once
-      const user = await tx.user.findUnique({
-        where: { wallet: ownerWallet },
-        select: {
-          id: true,
-          phorse: true,
-          medals: true,
-          totalPhorseEarned: true,
-          totalPhorseSpent: true,
-          lastRace: true,
-        },
-      });
-      if (!user) throw new NotFoundException('User not found');
+async startMultipleRace(
+  ownerWallet: string,
+  tokenIds: string[],
+): Promise<Array<{
+  tokenId: string;
+  xpReward: number;
+  tokenReward: number;
+  medalReward: number;
+  position: number;
+  finalStatus: 'IDLE' | 'SLEEP' | 'BRUISED';
+  droppedItems: string[];
+  droppedChests: number[];
+}>> {
+  return this.prisma.$transaction(async tx => {
+    // 1) Load user & check balance
+    const user = await tx.user.findUnique({
+      where: { wallet: ownerWallet },
+      select: {
+        id: true,
+        phorse: true,
+        medals: true,
+        totalPhorseEarned: true,
+        totalPhorseSpent: true,
+        lastRace: true,
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    const costPerRace = 50;
+    const totalCost = costPerRace * tokenIds.length;
+    if (user.phorse < totalCost) {
+      throw new BadRequestException('Not enough PHORSE to pay for all races');
+    }
 
-      if (user.phorse < tokenIds.length * 50) throw new BadRequestException('Not enough PHORSE to pay for race all');
+    // 2) Load horses & equipments
+    const horses = await tx.horse.findMany({
+      where: { tokenId: { in: tokenIds } },
+      include: { equipments: true },
+    });
+    if (horses.length !== tokenIds.length) {
+      throw new NotFoundException('One or more horses not found');
+    }
 
-      // 2) Load all horses + equipments
-      const horses = await tx.horse.findMany({
-        where: { tokenId: { in: tokenIds } },
-        include: { equipments: true },
-      });
-      if (horses.length !== tokenIds.length) {
-        throw new NotFoundException('One or more horses not found');
+    // Prepare accumulators
+    type RawResult = {
+      tokenId: string;
+      xpReward: number;
+      tokenReward: number;
+      medalReward: number;
+      position: number;
+      finalStatus: 'IDLE'|'SLEEP'|'BRUISED';
+      updatedExp: number;
+      newEnergy: number;
+      upgradable: boolean;
+    };
+    const rawResults: RawResult[] = [];
+    const itemInserts: Array<{
+      ownerId: string;
+      name: string;
+      value: number;
+      breakable: boolean;
+      uses: number | null;
+    }> = [];
+    const chestCounts = new Map<number, number>();
+    const droppedItemsMap = new Map<string, string[]>();
+    const droppedChestsMap = new Map<string, number[]>();
+
+    // Common globals
+    const baseEnergy = globals['Energy Spent'] as number;
+    const winrates = globals['Winrates'] as Record<string, number>;
+    const winThresholds = Object.keys(winrates).map(parseFloat).sort((a,b)=>a-b);
+    const rewardsCfg = globals['Rewards'];
+    const xpMultGlobal = globals['Experience Multiplier'] as number;
+
+    // 3) Per-horse logic
+    for (const horse of horses) {
+      if (horse.ownerId !== user.id) {
+        throw new ForbiddenException(`Not your horse ${horse.tokenId}`);
+      }
+      if (horse.status !== 'IDLE') {
+        throw new BadRequestException(`Horse ${horse.tokenId} must be IDLE`);
       }
 
-      // 3) Per-horse computation
-      type Result = {
-        tokenId: string;
-        xpReward: number;
-        tokenReward: number;
-        medalReward: number;
-        position: number;
-        finalStatus: 'IDLE' | 'SLEEP' | 'BRUISED';
-        newEnergy: number;
-        updatedExp: number;
-        upgradable: boolean;
-      };
-      const results: Result[] = [];
+      // a) compute modifiers & energy
+      const mods = horse.equipments
+        .map(i=>itemModifiers[i.name])
+        .filter(Boolean)
+        .reduce((acc,m)=>(<any>{
+          positionBoost: acc.positionBoost*m.positionBoost,
+          hurtRate:      acc.hurtRate*m.hurtRate,
+          xpMultiplier:  acc.xpMultiplier*m.xpMultiplier,
+          energySaved:   acc.energySaved + m.energySaved
+        }), { positionBoost:1, hurtRate:1, xpMultiplier:1, energySaved:0 });
 
-      for (const horse of horses) {
-        if (horse.ownerId !== user.id) {
-          throw new ForbiddenException(`Not your horse ${horse.tokenId}`);
-        }
-        if (horse.status !== 'IDLE') {
-          throw new BadRequestException(`Horse ${horse.tokenId} must be IDLE`);
-        }
+      const energySpent = Math.max(1, baseEnergy - mods.energySaved);
+      if (horse.currentEnergy < energySpent) {
+        throw new BadRequestException(`Not enough energy on ${horse.tokenId}`);
+      }
 
-        // a) energy cost & modifiers
-        const baseEnergy = globals['Energy Spent'] as number;
-        const mods = horse.equipments
-          .map(i => itemModifiers[i.name])
-          .filter(Boolean)
-          .reduce((acc, m) => ({
-            positionBoost: acc.positionBoost * m.positionBoost,
-            hurtRate: acc.hurtRate * m.hurtRate,
-            xpMultiplier: acc.xpMultiplier * m.xpMultiplier,
-            energySaved: acc.energySaved + m.energySaved,
-          }), { positionBoost: 1, hurtRate: 1, xpMultiplier: 1, energySaved: 0 });
+      // b) determine position & rewards
+      const extraSpd = horse.equipments.reduce((s,i)=>s+(itemModifiers[i.name]?.extraSpd||0),0);
+      const extraSpt = horse.equipments.reduce((s,i)=>s+(itemModifiers[i.name]?.extraSpt||0),0);
+      const extraPwr = horse.equipments.reduce((s,i)=>s+(itemModifiers[i.name]?.extraPwr||0),0);
+      const totalStats = horse.currentPower+extraPwr
+                       + horse.currentSprint+extraSpt
+                       + horse.currentSpeed+extraSpd;
+      const baseMod = totalStats / (globals['Base Denominator'] as number);
 
-        const energySpent = Math.max(1, baseEnergy - mods.energySaved);
-        if (horse.currentEnergy < energySpent) {
-          throw new BadRequestException(
-            `Not enough energy on ${horse.tokenId}: need ${energySpent}, have ${horse.currentEnergy}`
-          );
-        }
+      let roll = Math.random()*100*mods.positionBoost;
+      let chosen = winThresholds[0];
+      for (const t of winThresholds) {
+        if (roll >= t) chosen = t; else break;
+      }
+      const position = winrates[chosen.toString()];
+      const [xpBase, tokBase] = rewardsCfg[position.toString()];
+      const baseXp     = Math.floor(xpBase * baseMod * xpMultGlobal);
+      const xpReward   = Math.floor(baseXp * mods.xpMultiplier);
+      const tokenReward= parseFloat((tokBase * baseMod).toFixed(2));
+      const medalReward= position <= 3 ? 1 : 0;
 
-        // b) determine position & rewards
-        const extraSpd = horse.equipments.reduce((sum, i) => sum + (itemModifiers[i.name]?.extraSpd || 0), 0);
-        const extraSpt = horse.equipments.reduce((sum, i) => sum + (itemModifiers[i.name]?.extraSpt || 0), 0);
-        const extraPwr = horse.equipments.reduce((sum, i) => sum + (itemModifiers[i.name]?.extraPwr || 0), 0);
+      // c) post-race status
+      const newEnergy = horse.currentEnergy - energySpent;
+      const denom     = Math.log(totalStats)/Math.log(1.6);
+      const hurtChance= Math.min(1, denom>0?1/denom:0);
+      const isHurt    = Math.random()*mods.hurtRate < hurtChance;
+      let finalStatus: 'IDLE'|'SLEEP'|'BRUISED' = 'IDLE';
+      if (isHurt) finalStatus='BRUISED';
+      else if (newEnergy < energySpent) finalStatus='SLEEP';
 
-        const totalStats = horse.currentPower + extraPwr + horse.currentSprint + extraSpt + horse.currentSpeed + extraSpd;
-        const baseMod = totalStats / (globals['Base Denominator'] as number);
-        const roll = Math.min(100, Math.random() * 100 * mods.positionBoost);
-        const adjRoll = roll + 1.5 * horse.level;
-        const winrates = globals['Winrates'] as Record<string, number>;
-        const thresholds = Object.keys(winrates).map(parseFloat).sort((a, b) => a - b);
+      // d) xp & upgradable
+      const updatedExp = horse.exp + xpReward;
+      let upgradable = false;
+      const cap = levelLimits[horse.rarity];
+      if (cap!==undefined && horse.level<cap) {
+        const nextReq = xpProgression[horse.level];
+        if (nextReq!==undefined && updatedExp>=nextReq) upgradable=true;
+      }
 
-        let chosen = thresholds[0];
-        for (const t of thresholds) {
-          if (adjRoll >= t) chosen = t;
-          else break;
-        }
-        const position = winrates[chosen.toString()];
-        const [xpBase, tokenBase] = (globals['Rewards'] as Record<string, readonly [number, number]>)[position.toString()];
+      rawResults.push({
+        tokenId: horse.tokenId,
+        xpReward,
+        tokenReward,
+        medalReward,
+        position,
+        finalStatus,
+        updatedExp,
+        newEnergy,
+        upgradable,
+      });
 
-        const baseXp = Math.floor(xpBase * baseMod * (globals['Experience Multiplier'] as number));
-        const xpReward = Math.floor(baseXp * mods.xpMultiplier);
-        const tokenReward = parseFloat((tokenBase * baseMod).toFixed(2));
-        const medalReward = position <= 3 ? 1 : 0;
+      // ─── drop logic ─────────────────────────────────────────
+      const horseItemDrops: string[] = [];
+      const horseChestDrops: number[] = [];
 
-        // c) post-race status (fixed hurt logic)
-        const newEnergy = horse.currentEnergy - energySpent;
-        const denom = Math.log(totalStats) / Math.log(1.6);
-        const hurtChance = Math.min(1, denom > 0 ? 1 / denom : 0); // Math.min(1, denom > 0 ? 1 / denom : 0);
-        const isHurt = Math.random() * mods.hurtRate < hurtChance;
+      // compute combined dropsBoost
+      const dropsBoost = horse.equipments
+        .map(i=>itemModifiers[i.name]?.dropsBoost ?? 1)
+        .reduce((a,b)=>a*b, 1);
 
-        let finalStatus: 'IDLE' | 'SLEEP' | 'BRUISED' = 'IDLE';
-        if (isHurt) finalStatus = 'BRUISED';
-        else if (newEnergy < (baseEnergy - mods.energySaved)) finalStatus = 'SLEEP';
-
-        // d) xp & upgradable flag
-        const updatedExp = horse.exp + xpReward;
-        const cap = levelLimits[horse.rarity];
-        let upgradable = false;
-        if (cap !== undefined && horse.level < cap) {
-          const nextXpReq = xpProgression[horse.level];
-          if (nextXpReq !== undefined && updatedExp >= nextXpReq) {
-            upgradable = true;
+      // build cumulative tables
+      const itemTable: Record<string,number> = {};
+      for (const [thr,drops] of Object.entries(itemDrops) as [string,Record<string,number>][]) {
+        if (horse.level >= Number(thr)) {
+          for (const [n,pct] of Object.entries(drops)) {
+            itemTable[n] = (itemTable[n] ?? 0) + pct;
           }
         }
-
-        results.push({
-          tokenId: horse.tokenId,
-          xpReward,
-          tokenReward,
-          medalReward,
-          position,
-          finalStatus,
-          newEnergy,
-          updatedExp,
-          upgradable,
-        });
+      }
+      const chestTable: Record<number,number> = {};
+      for (const [thr,drops] of Object.entries(chestDrops) as [string,Record<string,number>][]) {
+        if (horse.level >= Number(thr)) {
+          for (const [ts,pct] of Object.entries(drops)) {
+            const t = Number(ts);
+            chestTable[t] = (chestTable[t] ?? 0) + pct;
+          }
+        }
       }
 
-      // 4) Aggregate user totals
-      const totalToken = results.reduce((sum, r) => sum + r.tokenReward, 0);
-      const totalMedal = results.reduce((sum, r) => sum + r.medalReward, 0);
+      // roll & queue
+      for (const [name,pct] of Object.entries(itemTable)) {
+        if (Math.random()*100 < pct * dropsBoost) {
+          horseItemDrops.push(name);
+          const def = allItems[name];
+          itemInserts.push({
+            ownerId: user.id,
+            name,
+            value: 1,
+            breakable: def.breakable,
+            uses: def.breakable ? def.uses : null,
+          });
+        }
+      }
+      for (const [t,pct] of Object.entries(chestTable).map(([k,v])=>[Number(k),v] as [number,number])) {
+        if (Math.random()*100 < pct * dropsBoost) {
+          horseChestDrops.push(t);
+          chestCounts.set(t, (chestCounts.get(t)??0) + 1);
+        }
+      }
 
-      // 5) Prepare all item-uses
-      const itemOps = horses.flatMap(h =>
-        h.equipments
-          .filter(i => itemModifiers[i.name] && i.breakable)
-          .map(i => {
-            const newUses = (i.uses ?? 0) - 1;
-            return newUses > 0
-              ? tx.item.update({ where: { id: i.id }, data: { uses: newUses } })
-              : tx.item.delete({ where: { id: i.id } });
-          })
-      );
+      droppedItemsMap.set(horse.tokenId, horseItemDrops);
+      droppedChestsMap.set(horse.tokenId, horseChestDrops);
+    }
 
-      // 6) Commit all writes in parallel
-      await Promise.all([
-        tx.user.update({
-          where: { id: user.id },
-          data: {
-            phorse: user.phorse + totalToken - (tokenIds.length * 50),
-            totalPhorseSpent: user.totalPhorseSpent + (tokenIds.length * 50),
-            medals: user.medals + totalMedal,
-            totalPhorseEarned: user.totalPhorseEarned + totalToken,
-            ...(user.lastRace ? {} : { lastRace: new Date() }),
-          },
-        }),
-        Promise.all(results.map(r =>
-          tx.horse.update({
-            where: { tokenId: r.tokenId },
-            data: {
-              exp: r.updatedExp,
-              currentEnergy: r.newEnergy,
-              status: r.finalStatus,
-              upgradable: r.upgradable,
-            },
-          })
-        )),
-        Promise.all(itemOps),
-        tx.raceHistory.createMany({
-          data: results.map(r => ({
-            horseId: horses.find(h => h.tokenId === r.tokenId)!.id,
-            phorseEarned: r.tokenReward,
-            xpEarned: r.xpReward,
-            position: r.position,
-          })),
-        }),
-      ]);
-
-      // 7) Return in input order
-      return tokenIds.map(id => {
-        const r = results.find(x => x.tokenId === id)!;
-        return {
-          tokenId: r.tokenId,
-          xpReward: r.xpReward,
-          tokenReward: r.tokenReward,
-          medalReward: r.medalReward,
+    // 4) Batch all writes
+    await Promise.all([
+      // user
+      tx.user.update({
+        where:{ id: user.id },
+        data:{
+          phorse: user.phorse + rawResults.reduce((s,r)=>s+r.tokenReward,0) - totalCost,
+          totalPhorseSpent: user.totalPhorseSpent + totalCost,
+          medals: user.medals + rawResults.reduce((s,r)=>s+r.medalReward,0),
+          totalPhorseEarned: user.totalPhorseEarned + rawResults.reduce((s,r)=>s+r.tokenReward,0),
+          ...(user.lastRace?{}:{ lastRace: new Date() })
+        }
+      }),
+      // horses
+      Promise.all(rawResults.map(r=>
+        tx.horse.update({
+          where:{ tokenId: r.tokenId },
+          data:{
+            exp: r.updatedExp,
+            currentEnergy: r.newEnergy,
+            status: r.finalStatus,
+            upgradable: r.upgradable,
+          }
+        })
+      )),
+      // history
+      tx.raceHistory.createMany({
+        data: rawResults.map(r => ({
+          horseId: horses.find(h=>h.tokenId===r.tokenId)!.id,
+          phorseEarned: r.tokenReward,
+          xpEarned: r.xpReward,
           position: r.position,
-          finalStatus: r.finalStatus,
-        };
-      });
-    });
-  }
+        })),
+      }),
+      // item drops
+      itemInserts.length
+        ? tx.item.createMany({ data: itemInserts })
+        : Promise.resolve(),
+      // chest drops
+      Promise.all(Array.from(chestCounts.entries()).map(([chType,count])=>
+        tx.chest.upsert({
+          where:{ ownerId_chestType:{ ownerId: user.id, chestType: chType } },
+          create:{ ownerId: user.id, chestType: chType, quantity: count },
+          update:{ quantity:{ increment: count } }
+        })
+      )),
+    ]);
+
+    // 5) Return per-horse enriched results
+    return rawResults.map(r => ({
+      tokenId: r.tokenId,
+      xpReward: r.xpReward,
+      tokenReward: r.tokenReward,
+      medalReward: r.medalReward,
+      position: r.position,
+      finalStatus: r.finalStatus,
+      droppedItems: droppedItemsMap.get(r.tokenId) || [],
+      droppedChests: droppedChestsMap.get(r.tokenId) || []
+    }));
+  });
+}
+
+
 
 
   /**
@@ -1114,7 +1237,7 @@ export class HorseService {
         );
 
       const energySpent = Math.max(1, baseEnergy - totalModifier.energySaved);
-      
+
       let newStatus;
       if (horse.status === 'IDLE') {
         newStatus = horse.currentEnergy >= energySpent ? 'IDLE' : 'SLEEP';

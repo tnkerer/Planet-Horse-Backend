@@ -1006,7 +1006,7 @@ export class UserService {
             let displayName = ref.discordTag || ref.refCode || null;
             if (!displayName) {
                 // fallback to wallet address (last 24 characters)
-                displayName = `0x${ref.wallet.slice(24)}...`;
+                displayName = ref.wallet;
             }
 
             let active;
