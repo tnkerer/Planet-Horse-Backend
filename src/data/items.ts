@@ -1177,18 +1177,18 @@ export const itemModifiers = {
         extraSpd: 0,
         extraSpt: 0,
         extraPwr: 0,
-        dropsBoost: 2
+        dropsBoost: 1.5
     }
 }
 
 export const itemDrops = {
     5: { // If horse is level is 5 or higher
-        "Hay": 5,  // Adds 5% chance of dropping this item
+        "Hay": 3,  // Adds 5% chance of dropping this item
         "Pumpers": 5, // Adds 5% chance of dropping this item
-        "Big Hay Bale": 1, // Adds 1% chance of dropping this item
+        "Big Hay Bale": 0.1, // Adds 1% chance of dropping this item
     },
     10: { // If horse is level is 10 or higher
-        "Big Hay Bale": 1, // Adds 1% chance of dropping this item
+        "Big Hay Bale": 0.5, // Adds 1% chance of dropping this item
         "Baby Horse Trophy": 0.05, // Adds 0.05% chance of dropping this item
         "Champion Bridle +3": 0.1, // Adds 0.1% chance of dropping this item
         "Champion Saddle Pad +3": 0.1, // Adds 0.1% chance of dropping this item
@@ -1204,7 +1204,7 @@ export const itemDrops = {
 
 export const chestDrops = {
     5: { // Level Threshold
-        1: 5, // Drop percetage of chest type 1 adds 5%
+        1: 3, // Drop percetage of chest type 1 adds 5%
         2: 0 // Drop percetage of chest type 2 adds 0%
     },
     10: { // Level Threshold
@@ -1212,7 +1212,7 @@ export const chestDrops = {
         2: 3 // Drop percetage of chest type 2 adds 3%
     },
     15: {
-        1: 5, // Drop percetage of chest type 1 adds 8%
+        1: 5, // Drop percetage of chest type 1 adds 5%
         2: 5 // Drop percetage of chest type 2 adds 5%
     }
 }
