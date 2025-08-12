@@ -1177,7 +1177,7 @@ export const itemModifiers = {
         extraSpd: 0,
         extraSpt: 0,
         extraPwr: 0,
-        dropsBoost: 1.5
+        dropsBoost: 2
     }
 }
 
