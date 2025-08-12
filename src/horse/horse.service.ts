@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { globals } from '../data/globals';
-import { items as allItems, itemModifiers, itemDrops, chestDrops } from '../data/items';
+import { items as allItems, itemModifiers, itemDrops, chestDrops, trophyDrops } from '../data/items';
 import { xpProgression, levelLimits } from '../data/xp_progression';
 import { lvlUpFee } from '../data/lvl_up_fee';
 import { rarityBase } from '../data/rarity_base';
@@ -511,14 +511,30 @@ export class HorseService {
 
       // ─── build cumulative drop tables ────────────────────────────────────────────
       const itemTable: Record<string, number> = {};
+
+
+      // 1) Level-based item drops
       for (const [thr, drops] of Object.entries(itemDrops) as [string, Record<string, number>][]) {
         if (horse.level >= Number(thr)) {
-          for (const [name, pct] of Object.entries(drops)) {
+          for (const [name, pct] of Object.entries(drops) as [string, number][]) {
             itemTable[name] = (itemTable[name] ?? 0) + pct;
           }
         }
       }
 
+      // 2) Trophy-based item drops (NEW)
+      const equippedTrophies = horse.equipments
+        .map(it => it.name)
+        .filter(name => (allItems as any)[name]?.trophy && (trophyDrops as any)[name]);
+
+      for (const trophyName of equippedTrophies) {
+        const extra = (trophyDrops as Record<string, Record<string, number>>)[trophyName];
+        for (const [name, pct] of Object.entries(extra) as [string, number][]) {
+          itemTable[name] = (itemTable[name] ?? 0) + pct; // additive with level table
+        }
+      }
+
+      // 3) Level-based chest drops (unchanged)
       const chestTable: Record<number, number> = {};
       for (const [thr, drops] of Object.entries(chestDrops) as [string, Record<string, number>][]) {
         if (horse.level >= Number(thr)) {
@@ -737,13 +753,29 @@ export class HorseService {
 
         // build cumulative tables
         const itemTable: Record<string, number> = {};
+
+        // 1) Level-based item drops
         for (const [thr, drops] of Object.entries(itemDrops) as [string, Record<string, number>][]) {
           if (horse.level >= Number(thr)) {
-            for (const [n, pct] of Object.entries(drops)) {
+            for (const [n, pct] of Object.entries(drops) as [string, number][]) {
               itemTable[n] = (itemTable[n] ?? 0) + pct;
             }
           }
         }
+
+        // 2) Trophy-based item drops (NEW)
+        const equippedTrophies = horse.equipments
+          .map(it => it.name)
+          .filter(name => (allItems as any)[name]?.trophy && (trophyDrops as any)[name]);
+
+        for (const trophyName of equippedTrophies) {
+          const extra = (trophyDrops as Record<string, Record<string, number>>)[trophyName];
+          for (const [n, pct] of Object.entries(extra) as [string, number][]) {
+            itemTable[n] = (itemTable[n] ?? 0) + pct;
+          }
+        }
+
+        // 3) Level-based chest drops
         const chestTable: Record<number, number> = {};
         for (const [thr, drops] of Object.entries(chestDrops) as [string, Record<string, number>][]) {
           if (horse.level >= Number(thr)) {
@@ -852,9 +884,6 @@ export class HorseService {
       }));
     });
   }
-
-
-
 
   /**
   * restoreHorse:

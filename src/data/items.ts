@@ -41,7 +41,7 @@ export const items = {
     "Rice Sack": {
         "name": "Rice Sack",
         "src": "sack",
-        "description": "A rice sack from a foreign land. Can be traded for $RICE. ",
+        "description": "A rice sack from a foreign land. Can be traded for $RICE.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -1181,11 +1181,18 @@ export const itemModifiers = {
     }
 }
 
+export const trophyDrops = {
+    "Ronke Farmer Trophy" : {
+        "Rice Bowl" : 10,
+        "Rice Sack" : 0.05
+    }
+}
+
 export const itemDrops = {
     5: { // If horse is level is 5 or higher
         "Hay": 3,  // Adds 5% chance of dropping this item
         "Pumpers": 5, // Adds 5% chance of dropping this item
-        "Big Hay Bale": 0.1, // Adds 1% chance of dropping this item
+        "Big Hay Bale": 0.1, // Adds 0.1% chance of dropping this item
     },
     10: { // If horse is level is 10 or higher
         "Big Hay Bale": 0.5, // Adds 1% chance of dropping this item
