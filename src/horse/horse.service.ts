@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { globals } from '../data/globals';
 import { items as allItems, itemModifiers, itemDrops, chestDrops, trophyDrops } from '../data/items';
 import { xpProgression, levelLimits } from '../data/xp_progression';
-import { lvlUpFee } from '../data/lvl_up_fee';
+import { lvlUpFee, lvlUpRarityMultiplier } from '../data/lvl_up_fee';
 import { rarityBase } from '../data/rarity_base';
 import { Status } from '@prisma/client';
 import { EquipItemDto } from './dto/equip-item.dto';
@@ -238,8 +238,11 @@ export class HorseService {
       const incSpeed = rollGrowth() * 2;
 
       // 5) Determine “level up” cost in phorse & medals for oldLevel
-      const phorseCost = lvlUpFee.phorse[oldLevel];
-      const medalCost = lvlUpFee.medals[oldLevel];
+      const rarityMult = lvlUpRarityMultiplier[rarity as keyof typeof lvlUpRarityMultiplier];
+      if (!rarityMult) throw new BadRequestException(`No rarity multiplier for rarity ${rarity}`);
+
+      const phorseCost = Math.ceil(lvlUpFee.phorse[oldLevel] * rarityMult.phorse);
+      const medalCost = Math.ceil(lvlUpFee.medals[oldLevel] * rarityMult.medals);
       if (phorseCost === undefined || medalCost === undefined) {
         throw new BadRequestException(`No fee defined for level ${oldLevel}`);
       }
@@ -402,9 +405,10 @@ export class HorseService {
 
       const totalStats = horse.currentPower + extraPwr + horse.currentSprint + extraSpt + horse.currentSpeed + extraSpd;
       const baseMod = totalStats / (globals['Base Denominator'] as number);
+      const baseXpMod = totalStats / 12;
 
       const roll = Math.min(100, Math.random() * 100 * totalModifier.positionBoost);
-      const adjRoll = roll + 1.5 * horse.level;
+      const adjRoll = roll + 1 * horse.level;
 
       const winrates = globals['Winrates'] as Record<string, number>;
       const thresholds = Object.keys(winrates).map(parseFloat).sort((a, b) => a - b);
@@ -418,7 +422,7 @@ export class HorseService {
       const rewardsCfg = globals['Rewards'] as Record<string, readonly [number, number]>;
       const [xpBase, tokenBase] = rewardsCfg[position.toString()];
 
-      const baseXpReward = Math.floor(xpBase * baseMod * (globals['Experience Multiplier'] as number));
+      const baseXpReward = Math.floor(xpBase * baseXpMod * (globals['Experience Multiplier'] as number));
       const xpReward = Math.floor(baseXpReward * totalModifier.xpMultiplier);
       const tokenReward = parseFloat((tokenBase * baseMod).toFixed(2));
       const medalReward = position <= 3 ? 1 : 0;
@@ -699,15 +703,17 @@ export class HorseService {
           + horse.currentSprint + extraSpt
           + horse.currentSpeed + extraSpd;
         const baseMod = totalStats / (globals['Base Denominator'] as number);
+        const baseXpMod = totalStats / 12;
 
         let roll = Math.random() * 100 * mods.positionBoost;
+        const adjRoll = roll + 1 * horse.level;
         let chosen = winThresholds[0];
         for (const t of winThresholds) {
-          if (roll >= t) chosen = t; else break;
+          if (adjRoll >= t) chosen = t; else break;
         }
         const position = winrates[chosen.toString()];
         const [xpBase, tokBase] = rewardsCfg[position.toString()];
-        const baseXp = Math.floor(xpBase * baseMod * xpMultGlobal);
+        const baseXp = Math.floor(xpBase * baseXpMod * xpMultGlobal);
         const xpReward = Math.floor(baseXp * mods.xpMultiplier);
         const tokenReward = parseFloat((tokBase * baseMod).toFixed(2));
         const medalReward = position <= 3 ? 1 : 0;

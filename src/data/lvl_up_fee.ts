@@ -65,3 +65,13 @@ export const lvlUpFee = {
     30: 624,
   },
 } as const;
+
+export const lvlUpRarityMultiplier = {
+  Common:   { phorse: 0.60,   medals: 1.0 },
+  Uncommon: { phorse: 0.75,   medals: 1.0 },
+  Rare:     { phorse: 0.85,  medals: 1.0 },
+  Epic:     { phorse: 0.90,   medals: 1.0 },
+  Legendary:{ phorse: 0.95,  medals: 1.0 },
+  Mythic:   { phorse: 1,   medals: 1.0 },
+} as const;
+

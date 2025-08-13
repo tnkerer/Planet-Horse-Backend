@@ -1,4 +1,14 @@
 export const items = {
+    "Medal Bag": {
+        "name": "Medal Bag",
+        "src": "medal_bag",
+        "description": "A bag containing 50 medals!",
+        "breakable": true,
+        "consumable": true,
+        "uses": 1,
+        "chainId": 999,
+        "chainSrc": "https://ipfs.io/ipfs/bafybeiafovans3zgtmpsfe2q7amtv3xiznsrncwfu7pubd3hfjgparxbky"
+    },
     "Hay": {
         "name": "Hay",
         "src": "hay",
@@ -173,6 +183,17 @@ export const items = {
         "chainId": 10004,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeifl7o34ku3fwrbuiwunfo6fyrumeoubr3vkm3eyjzfgdrv5ervfqy'
     },
+    "BoostRexGQ Trophy": {
+        "name": "BoostRexGQ Trophy",
+        "src": "rex",
+        "description": "50% Increased XP gain. Rex is happy when GQ dances the Planet Horse song!",
+        "breakable": false,
+        "consumable": false,
+        "trophy": true,
+        "uses": 1,
+        "chainId": 10005,
+        "chainSrc": 'https://ipfs.io/ipfs/bafybeibov65x6chyri2zfpax3si2le27bag3rpqq63veu62pydvgkscejy'
+    },
     "Champion Saddle Pad": {
         "name": "Champion Saddle Pad",
         "src": "saddle_pad",
@@ -226,7 +247,7 @@ export const items = {
     "Champion Saddle Pad +5": {
         "name": "Champion Saddle Pad +5",
         "src": "saddle_pad1",
-        "description": "Increase SPRINT by 18 points during races.",
+        "description": "Increase SPRINT by 25 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -236,7 +257,7 @@ export const items = {
     "Champion Saddle Pad +6": {
         "name": "Champion Saddle Pad +6",
         "src": "saddle_pad2",
-        "description": "Increase SPRINT by 21 points during races.",
+        "description": "Increase SPRINT by 28 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -246,7 +267,7 @@ export const items = {
     "Champion Saddle Pad +7": {
         "name": "Champion Saddle Pad +7",
         "src": "saddle_pad2",
-        "description": "Increase SPRINT by 24 points during races.",
+        "description": "Increase SPRINT by 31 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -256,7 +277,7 @@ export const items = {
     "Champion Saddle Pad +8": {
         "name": "Champion Saddle Pad +8",
         "src": "saddle_pad3",
-        "description": "Increase SPRINT by 27 points during races.",
+        "description": "Increase SPRINT by 34 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -266,7 +287,7 @@ export const items = {
     "Champion Saddle Pad +9": {
         "name": "Champion Saddle Pad +9",
         "src": "saddle_pad3",
-        "description": "Increase SPRINT by 30 points during races.",
+        "description": "Increase SPRINT by 37 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -276,7 +297,7 @@ export const items = {
     "Champion Saddle Pad +10": {
         "name": "Champion Saddle Pad +10",
         "src": "saddle_pad4",
-        "description": "Increase SPRINT by 33 points during races.",
+        "description": "Increase SPRINT by 47 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -286,7 +307,7 @@ export const items = {
     "Champion Saddle Pad +11": {
         "name": "Champion Saddle Pad +11",
         "src": "saddle_pad4",
-        "description": "Increase SPRINT by 36 points during races.",
+        "description": "Increase SPRINT by 50 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -296,7 +317,7 @@ export const items = {
     "Champion Saddle Pad +12": {
         "name": "Champion Saddle Pad +12",
         "src": "saddle_pad5",
-        "description": "Increase SPRINT by 39 points during races.",
+        "description": "Increase SPRINT by 53 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -306,7 +327,7 @@ export const items = {
     "Champion Saddle Pad +13": {
         "name": "Champion Saddle Pad +13",
         "src": "saddle_pad5",
-        "description": "Increase SPRINT by 42 points during races.",
+        "description": "Increase SPRINT by 56 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -316,7 +337,7 @@ export const items = {
     "Champion Saddle Pad +14": {
         "name": "Champion Saddle Pad +14",
         "src": "saddle_pad6",
-        "description": "Increase SPRINT by 45 points during races.",
+        "description": "Increase SPRINT by 59 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -326,7 +347,7 @@ export const items = {
     "Champion Saddle Pad +15": {
         "name": "Champion Saddle Pad +15",
         "src": "saddle_pad6",
-        "description": "Increase SPRINT by 48 points during races.",
+        "description": "Increase SPRINT by 69 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -386,7 +407,7 @@ export const items = {
     "Champion Bridle +5": {
         "name": "Champion Bridle +5",
         "src": "bridle1",
-        "description": "Increase SPEED by 18 points during races.",
+        "description": "Increase SPEED by 25 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -396,7 +417,7 @@ export const items = {
     "Champion Bridle +6": {
         "name": "Champion Bridle +6",
         "src": "bridle2",
-        "description": "Increase SPEED by 21 points during races.",
+        "description": "Increase SPEED by 28 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -406,7 +427,7 @@ export const items = {
     "Champion Bridle +7": {
         "name": "Champion Bridle +7",
         "src": "bridle2",
-        "description": "Increase SPEED by 24 points during races.",
+        "description": "Increase SPEED by 31 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -416,7 +437,7 @@ export const items = {
     "Champion Bridle +8": {
         "name": "Champion Bridle +8",
         "src": "bridle3",
-        "description": "Increase SPEED by 27 points during races.",
+        "description": "Increase SPEED by 34 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -426,7 +447,7 @@ export const items = {
     "Champion Bridle +9": {
         "name": "Champion Bridle +9",
         "src": "bridle3",
-        "description": "Increase SPEED by 30 points during races.",
+        "description": "Increase SPEED by 37 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -436,7 +457,7 @@ export const items = {
     "Champion Bridle +10": {
         "name": "Champion Bridle +10",
         "src": "bridle4",
-        "description": "Increase SPEED by 33 points during races.",
+        "description": "Increase SPEED by 47 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -446,7 +467,7 @@ export const items = {
     "Champion Bridle +11": {
         "name": "Champion Bridle +11",
         "src": "bridle4",
-        "description": "Increase SPEED by 36 points during races.",
+        "description": "Increase SPEED by 50 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -456,7 +477,7 @@ export const items = {
     "Champion Bridle +12": {
         "name": "Champion Bridle +12",
         "src": "bridle5",
-        "description": "Increase SPEED by 39 points during races.",
+        "description": "Increase SPEED by 53 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -466,7 +487,7 @@ export const items = {
     "Champion Bridle +13": {
         "name": "Champion Bridle +13",
         "src": "bridle5",
-        "description": "Increase SPEED by 42 points during races.",
+        "description": "Increase SPEED by 56 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -476,7 +497,7 @@ export const items = {
     "Champion Bridle +14": {
         "name": "Champion Bridle +14",
         "src": "bridle6",
-        "description": "Increase SPEED by 45 points during races.",
+        "description": "Increase SPEED by 59 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -486,7 +507,7 @@ export const items = {
     "Champion Bridle +15": {
         "name": "Champion Bridle +15",
         "src": "bridle6",
-        "description": "Increase SPEED by 48 points during races.",
+        "description": "Increase SPEED by 69 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -546,7 +567,7 @@ export const items = {
     "Champion Stirrups +5": {
         "name": "Champion Stirrups +5",
         "src": "stirrups1",
-        "description": "Increase POWER by 18 points during races.",
+        "description": "Increase POWER by 25 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -556,7 +577,7 @@ export const items = {
     "Champion Stirrups +6": {
         "name": "Champion Stirrups +6",
         "src": "stirrups2",
-        "description": "Increase POWER by 21 points during races.",
+        "description": "Increase POWER by 28 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -566,7 +587,7 @@ export const items = {
     "Champion Stirrups +7": {
         "name": "Champion Stirrups +7",
         "src": "stirrups2",
-        "description": "Increase POWER by 24 points during races.",
+        "description": "Increase POWER by 31 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -576,7 +597,7 @@ export const items = {
     "Champion Stirrups +8": {
         "name": "Champion Stirrups +8",
         "src": "stirrups3",
-        "description": "Increase POWER by 27 points during races.",
+        "description": "Increase POWER by 34 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -586,7 +607,7 @@ export const items = {
     "Champion Stirrups +9": {
         "name": "Champion Stirrups +9",
         "src": "stirrups3",
-        "description": "Increase POWER by 30 points during races.",
+        "description": "Increase POWER by 37 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -596,7 +617,7 @@ export const items = {
     "Champion Stirrups +10": {
         "name": "Champion Stirrups +10",
         "src": "stirrups4",
-        "description": "Increase POWER by 33 points during races.",
+        "description": "Increase POWER by 47 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -606,7 +627,7 @@ export const items = {
     "Champion Stirrups +11": {
         "name": "Champion Stirrups +11",
         "src": "stirrups4",
-        "description": "Increase POWER by 36 points during races.",
+        "description": "Increase POWER by 50 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -616,7 +637,7 @@ export const items = {
     "Champion Stirrups +12": {
         "name": "Champion Stirrups +12",
         "src": "stirrups5",
-        "description": "Increase POWER by 39 points during races.",
+        "description": "Increase POWER by 53 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -626,7 +647,7 @@ export const items = {
     "Champion Stirrups +13": {
         "name": "Champion Stirrups +13",
         "src": "stirrups5",
-        "description": "Increase POWER by 42 points during races.",
+        "description": "Increase POWER by 56 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -636,7 +657,7 @@ export const items = {
     "Champion Stirrups +14": {
         "name": "Champion Stirrups +14",
         "src": "stirrups6",
-        "description": "Increase POWER by 45 points during races.",
+        "description": "Increase POWER by 59 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -646,7 +667,7 @@ export const items = {
     "Champion Stirrups +15": {
         "name": "Champion Stirrups +15",
         "src": "stirrups6",
-        "description": "Increase POWER by 48 points during races.",
+        "description": "Increase POWER by 69 points during races.",
         "breakable": false,
         "consumable": false,
         "uses": 1,
@@ -726,7 +747,7 @@ export const itemModifiers = {
         energySaved: 0,
         extraSpd: 0,
         extraSpt: 0,
-        extraPwr: 18,
+        extraPwr: 25,
     },
     "Champion Stirrups +6": {
         positionBoost: 1,
@@ -735,7 +756,7 @@ export const itemModifiers = {
         energySaved: 0,
         extraSpd: 0,
         extraSpt: 0,
-        extraPwr: 21,
+        extraPwr: 28,
     },
     "Champion Stirrups +7": {
         positionBoost: 1,
@@ -744,7 +765,7 @@ export const itemModifiers = {
         energySaved: 0,
         extraSpd: 0,
         extraSpt: 0,
-        extraPwr: 24,
+        extraPwr: 31,
     },
     "Champion Stirrups +8": {
         positionBoost: 1,
@@ -753,7 +774,7 @@ export const itemModifiers = {
         energySaved: 0,
         extraSpd: 0,
         extraSpt: 0,
-        extraPwr: 27,
+        extraPwr: 34,
     },
     "Champion Stirrups +9": {
         positionBoost: 1,
@@ -762,7 +783,7 @@ export const itemModifiers = {
         energySaved: 0,
         extraSpd: 0,
         extraSpt: 0,
-        extraPwr: 30,
+        extraPwr: 37,
     },
     "Champion Stirrups +10": {
         positionBoost: 1,
@@ -771,7 +792,7 @@ export const itemModifiers = {
         energySaved: 0,
         extraSpd: 0,
         extraSpt: 0,
-        extraPwr: 33,
+        extraPwr: 47,
     },
     "Champion Stirrups +11": {
         positionBoost: 1,
@@ -780,7 +801,7 @@ export const itemModifiers = {
         energySaved: 0,
         extraSpd: 0,
         extraSpt: 0,
-        extraPwr: 36,
+        extraPwr: 50,
     },
     "Champion Stirrups +12": {
         positionBoost: 1,
@@ -789,7 +810,7 @@ export const itemModifiers = {
         energySaved: 0,
         extraSpd: 0,
         extraSpt: 0,
-        extraPwr: 39,
+        extraPwr: 53,
     },
     "Champion Stirrups +13": {
         positionBoost: 1,
@@ -798,7 +819,7 @@ export const itemModifiers = {
         energySaved: 0,
         extraSpd: 0,
         extraSpt: 0,
-        extraPwr: 42,
+        extraPwr: 56,
     },
     "Champion Stirrups +14": {
         positionBoost: 1,
@@ -807,7 +828,7 @@ export const itemModifiers = {
         energySaved: 0,
         extraSpd: 0,
         extraSpt: 0,
-        extraPwr: 45,
+        extraPwr: 59,
     },
     "Champion Stirrups +15": {
         positionBoost: 1,
@@ -816,7 +837,7 @@ export const itemModifiers = {
         energySaved: 0,
         extraSpd: 0,
         extraSpt: 0,
-        extraPwr: 48,
+        extraPwr: 69,
     },
     "Champion Bridle +1": {
         positionBoost: 1,
@@ -859,7 +880,7 @@ export const itemModifiers = {
         hurtRate: 1,
         xpMultiplier: 1,
         energySaved: 0,
-        extraSpd: 18,
+        extraSpd: 25,
         extraSpt: 0,
         extraPwr: 0,
     },
@@ -868,7 +889,7 @@ export const itemModifiers = {
         hurtRate: 1,
         xpMultiplier: 1,
         energySaved: 0,
-        extraSpd: 21,
+        extraSpd: 28,
         extraSpt: 0,
         extraPwr: 0,
     },
@@ -877,7 +898,7 @@ export const itemModifiers = {
         hurtRate: 1,
         xpMultiplier: 1,
         energySaved: 0,
-        extraSpd: 24,
+        extraSpd: 31,
         extraSpt: 0,
         extraPwr: 0,
     },
@@ -886,7 +907,7 @@ export const itemModifiers = {
         hurtRate: 1,
         xpMultiplier: 1,
         energySaved: 0,
-        extraSpd: 27,
+        extraSpd: 34,
         extraSpt: 0,
         extraPwr: 0,
     },
@@ -895,7 +916,7 @@ export const itemModifiers = {
         hurtRate: 1,
         xpMultiplier: 1,
         energySaved: 0,
-        extraSpd: 30,
+        extraSpd: 37,
         extraSpt: 0,
         extraPwr: 0,
     },
@@ -904,7 +925,7 @@ export const itemModifiers = {
         hurtRate: 1,
         xpMultiplier: 1,
         energySaved: 0,
-        extraSpd: 33,
+        extraSpd: 47,
         extraSpt: 0,
         extraPwr: 0,
     },
@@ -913,7 +934,7 @@ export const itemModifiers = {
         hurtRate: 1,
         xpMultiplier: 1,
         energySaved: 0,
-        extraSpd: 36,
+        extraSpd: 50,
         extraSpt: 0,
         extraPwr: 0,
     },
@@ -922,7 +943,7 @@ export const itemModifiers = {
         hurtRate: 1,
         xpMultiplier: 1,
         energySaved: 0,
-        extraSpd: 39,
+        extraSpd: 53,
         extraSpt: 0,
         extraPwr: 0,
     },
@@ -931,7 +952,7 @@ export const itemModifiers = {
         hurtRate: 1,
         xpMultiplier: 1,
         energySaved: 0,
-        extraSpd: 42,
+        extraSpd: 56,
         extraSpt: 0,
         extraPwr: 0,
     },
@@ -940,7 +961,7 @@ export const itemModifiers = {
         hurtRate: 1,
         xpMultiplier: 1,
         energySaved: 0,
-        extraSpd: 45,
+        extraSpd: 59,
         extraSpt: 0,
         extraPwr: 0,
     },
@@ -949,7 +970,7 @@ export const itemModifiers = {
         hurtRate: 1,
         xpMultiplier: 1,
         energySaved: 0,
-        extraSpd: 48,
+        extraSpd: 69,
         extraSpt: 0,
         extraPwr: 0,
     },
@@ -995,7 +1016,7 @@ export const itemModifiers = {
         xpMultiplier: 1,
         energySaved: 0,
         extraSpd: 0,
-        extraSpt: 18,
+        extraSpt: 25,
         extraPwr: 0,
     },
     "Champion Saddle Pad +6": {
@@ -1004,7 +1025,7 @@ export const itemModifiers = {
         xpMultiplier: 1,
         energySaved: 0,
         extraSpd: 0,
-        extraSpt: 21,
+        extraSpt: 28,
         extraPwr: 0,
     },
     "Champion Saddle Pad +7": {
@@ -1013,7 +1034,7 @@ export const itemModifiers = {
         xpMultiplier: 1,
         energySaved: 0,
         extraSpd: 0,
-        extraSpt: 24,
+        extraSpt: 31,
         extraPwr: 0,
     },
     "Champion Saddle Pad +8": {
@@ -1022,7 +1043,7 @@ export const itemModifiers = {
         xpMultiplier: 1,
         energySaved: 0,
         extraSpd: 0,
-        extraSpt: 27,
+        extraSpt: 34,
         extraPwr: 0,
     },
     "Champion Saddle Pad +9": {
@@ -1031,7 +1052,7 @@ export const itemModifiers = {
         xpMultiplier: 1,
         energySaved: 0,
         extraSpd: 0,
-        extraSpt: 30,
+        extraSpt: 37,
         extraPwr: 0,
     },
     "Champion Saddle Pad +10": {
@@ -1040,7 +1061,7 @@ export const itemModifiers = {
         xpMultiplier: 1,
         energySaved: 0,
         extraSpd: 0,
-        extraSpt: 33,
+        extraSpt: 47,
         extraPwr: 0,
     },
     "Champion Saddle Pad +11": {
@@ -1049,7 +1070,7 @@ export const itemModifiers = {
         xpMultiplier: 1,
         energySaved: 0,
         extraSpd: 0,
-        extraSpt: 36,
+        extraSpt: 50,
         extraPwr: 0,
     },
     "Champion Saddle Pad +12": {
@@ -1058,7 +1079,7 @@ export const itemModifiers = {
         xpMultiplier: 1,
         energySaved: 0,
         extraSpd: 0,
-        extraSpt: 39,
+        extraSpt: 53,
         extraPwr: 0,
     },
     "Champion Saddle Pad +13": {
@@ -1067,7 +1088,7 @@ export const itemModifiers = {
         xpMultiplier: 1,
         energySaved: 0,
         extraSpd: 0,
-        extraSpt: 42,
+        extraSpt: 56,
         extraPwr: 0,
     },
     "Champion Saddle Pad +14": {
@@ -1076,7 +1097,7 @@ export const itemModifiers = {
         xpMultiplier: 1,
         energySaved: 0,
         extraSpd: 0,
-        extraSpt: 45,
+        extraSpt: 59,
         extraPwr: 0,
     },
     "Champion Saddle Pad +15": {
@@ -1085,7 +1106,7 @@ export const itemModifiers = {
         xpMultiplier: 1,
         energySaved: 0,
         extraSpd: 0,
-        extraSpt: 48,
+        extraSpt: 69,
         extraPwr: 0,
     },
     "Baby Ronke Trophy": {
@@ -1161,7 +1182,7 @@ export const itemModifiers = {
         extraPwr: 0,
     },
     "Pumpers": {
-        positionBoost: 1.25,
+        positionBoost: 1.15,
         hurtRate: 0.6,
         xpMultiplier: 1,
         energySaved: 0,
@@ -1169,7 +1190,7 @@ export const itemModifiers = {
         extraSpt: 0,
         extraPwr: 0,
     },
-    "Krambee The Goat" : {
+    "Krambee The Goat": {
         positionBoost: 1,
         hurtRate: 1,
         xpMultiplier: 1,
@@ -1178,13 +1199,23 @@ export const itemModifiers = {
         extraSpt: 0,
         extraPwr: 0,
         dropsBoost: 2
+    },
+    "BoostRexGQ Trophy": {
+        positionBoost: 1,
+        hurtRate: 1,
+        xpMultiplier: 1.5,
+        energySaved: 0,
+        extraSpd: 0,
+        extraSpt: 0,
+        extraPwr: 0,
+        dropsBoost: 1
     }
 }
 
 export const trophyDrops = {
-    "Ronke Farmer Trophy" : {
-        "Rice Bowl" : 10,
-        "Rice Sack" : 0.05
+    "Ronke Farmer Trophy": {
+        "Rice Bowl": 10,
+        "Rice Sack": 0.05
     }
 }
 
