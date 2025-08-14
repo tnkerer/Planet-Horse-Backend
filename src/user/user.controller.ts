@@ -1,9 +1,7 @@
-import { Controller, Get, UseGuards, Request, NotFoundException, Post, Body, BadRequestException, Param } from '@nestjs/common';
+import { Controller, Get, UseGuards, Request, NotFoundException, Post, Body, BadRequestException } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UserService } from './user.service';
-import { WithdrawDto } from './dto/withdraw.dto';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
-import { CreatePresaleIntentDto } from './dto/create-presale-intent.dto';
 import { RecycleDto } from './dto/recycle.dto';
 import { UpgradeItemDto } from './dto/upgrade-item.dto';
 
@@ -243,5 +241,52 @@ export class UserController {
   async setReferredBy(@Request() req, @Body('refCode') refCode: string) {
     const wallet = req.user.wallet; // Or however you're getting current user
     return this.users.setReferredBy(wallet, refCode);
+  }
+
+   /**
+   * POST /user/items/open-bag
+   * Optional: Idempotency-Key header or { idempotencyKey?: string } in body
+   * Returns: { added: number; newMedals: number; remainingBags: number }
+   */
+  @Throttle({ default: { limit: 15, ttl: 60_000 } })
+  @Post('items/open-bag')
+  async openMedalBag(
+    @Request() req,
+    @Body() body: { idempotencyKey?: string } = {},
+  ) {
+    try {
+      const wallet = req.user?.wallet;
+      if (!wallet || typeof wallet !== 'string') {
+        throw new BadRequestException('Invalid authenticated wallet');
+      }
+
+      const bodyKey =
+        body && typeof body.idempotencyKey === 'string'
+          ? body.idempotencyKey.trim()
+          : undefined;
+
+      const idempotencyKey = bodyKey || undefined;
+
+      if (idempotencyKey && idempotencyKey.length > 128) {
+        throw new BadRequestException('idempotencyKey too long (max 128 chars)');
+      }
+
+      const result = await this.users.openBag(wallet, idempotencyKey);
+      return result;
+    } catch (error) {
+      // Preserve known 4xx from service; coerce unknowns to 400 to avoid 500s
+      if (
+        error?.status &&
+        typeof error.status === 'number' &&
+        error.status >= 400 &&
+        error.status < 500
+      ) {
+        throw error;
+      }
+      // Minimal log, avoid heavy stringification
+      // eslint-disable-next-line no-console
+      console.error('openMedalBag unexpected error');
+      throw new BadRequestException('Could not open Medal Bag');
+    }
   }
 }

@@ -425,7 +425,9 @@ export class HorseService {
       const baseXpReward = Math.floor(xpBase * baseXpMod * (globals['Experience Multiplier'] as number));
       const xpReward = Math.floor(baseXpReward * totalModifier.xpMultiplier);
       const tokenReward = parseFloat((tokenBase * baseMod).toFixed(2));
-      const medalReward = position <= 3 ? 1 : 0;
+      const medalReward = position === 1 ? 3 :
+        position === 2 ? 2 :
+          position === 3 ? 1 : 0;
 
       const newEnergy = horse.currentEnergy - energySpent;
       const denom = Math.log(totalStats) / Math.log(1.6);
@@ -716,7 +718,9 @@ export class HorseService {
         const baseXp = Math.floor(xpBase * baseXpMod * xpMultGlobal);
         const xpReward = Math.floor(baseXp * mods.xpMultiplier);
         const tokenReward = parseFloat((tokBase * baseMod).toFixed(2));
-        const medalReward = position <= 3 ? 1 : 0;
+        const medalReward = position === 1 ? 3 :
+          position === 2 ? 2 :
+            position === 3 ? 1 : 0;
 
         // c) post-race status
         const newEnergy = horse.currentEnergy - energySpent;

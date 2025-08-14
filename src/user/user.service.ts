@@ -1079,4 +1079,114 @@ export class UserService {
             message: `Successfully set referredBy using referral code "${refCode}"`,
         };
     }
+
+    /**
+    * Open a single "Medal Bag" for the given wallet.
+    * - Concurrency-safe single-row delete (CTE + SKIP LOCKED)
+    * - Only consumes unequipped bags (horseId IS NULL)
+    * - Idempotent if idempotencyKey is provided
+    */
+    async openBag(
+        ownerWallet: string,
+        idempotencyKey?: string
+    ): Promise<{ added: number; newMedals: number; remainingBags: number }> {
+        const ITEM_NAME = 'Medal Bag';
+        const MEDALS_PER_BAG = 50;
+
+        // Basic validation
+        if (!ownerWallet || typeof ownerWallet !== 'string') {
+            throw new BadRequestException('Invalid wallet');
+        }
+        if (idempotencyKey && typeof idempotencyKey !== 'string') {
+            throw new BadRequestException('Invalid idempotencyKey');
+        }
+
+        return this.prisma.$transaction(async (tx) => {
+            // 1) Find user (select minimal fields)
+            const user = await tx.user.findUnique({
+                where: { wallet: ownerWallet },
+                select: { id: true },
+            });
+            if (!user) throw new NotFoundException('User not found');
+
+            // 2) If idempotencyKey provided and we already processed it, return current state
+            if (idempotencyKey) {
+                const existing = await tx.transaction.findFirst({
+                    where: {
+                        ownerId: user.id,
+                        type: TransactionType.ITEM,
+                        status: TransactionStatus.COMPLETED,
+                        note: { contains: `[IDEMP:${idempotencyKey}]` },
+                    },
+                    select: { id: true },
+                });
+                if (existing) {
+                    // Already processed once; return current medals + remaining bag count
+                    const [u, remainingBags] = await Promise.all([
+                        tx.user.findUnique({ where: { id: user.id }, select: { medals: true } }),
+                        tx.item.count({
+                            where: { ownerId: user.id, name: ITEM_NAME, horseId: null },
+                        }),
+                    ]);
+                    return { added: MEDALS_PER_BAG, newMedals: u!.medals, remainingBags };
+                }
+            }
+
+            // 3) Concurrency-safe: delete exactly ONE bag using a CTE with SKIP LOCKED
+            //    This avoids double-spend under parallel requests.
+            type Row = { id: string };
+            const rows = await tx.$queryRaw<Row[]>`
+        WITH picked AS (
+          SELECT "id"
+          FROM "Item"
+          WHERE "ownerId" = ${user.id}
+            AND "name" = ${ITEM_NAME}
+            AND "horseId" IS NULL
+          ORDER BY "createdAt" ASC
+          LIMIT 1
+          FOR UPDATE SKIP LOCKED
+        )
+        DELETE FROM "Item"
+        WHERE "id" IN (SELECT "id" FROM picked)
+        RETURNING "id";
+      `;
+
+            // No available bag (or lost race under concurrency)
+            if (!rows || rows.length === 0) {
+                // If client sent an idempotencyKey that is brand-new but no bag exists, treat as 404
+                throw new NotFoundException(`You do not own any "${ITEM_NAME}"`);
+            }
+
+            // 4) Credit medals
+            const updatedUser = await tx.user.update({
+                where: { id: user.id },
+                data: { medals: { increment: MEDALS_PER_BAG } },
+                select: { medals: true },
+            });
+
+            // 5) Log ITEM transaction (helps audit/idempotency)
+            const note = `Opened ${ITEM_NAME} (+${MEDALS_PER_BAG} medals)${idempotencyKey ? ` [IDEMP:${idempotencyKey}]` : ''
+                }`;
+            await tx.transaction.create({
+                data: {
+                    ownerId: user.id,
+                    type: TransactionType.ITEM,
+                    status: TransactionStatus.COMPLETED,
+                    value: 0,
+                    note,
+                },
+            });
+
+            // 6) Count remaining bags
+            const remainingBags = await tx.item.count({
+                where: { ownerId: user.id, name: ITEM_NAME, horseId: null },
+            });
+
+            return {
+                added: MEDALS_PER_BAG,
+                newMedals: updatedUser.medals,
+                remainingBags,
+            };
+        }, { timeout: 10_000 }); // defensive: bound TX runtime
+    }
 }
