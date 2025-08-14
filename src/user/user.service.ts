@@ -8,6 +8,7 @@ import { getWithdrawUserPct, withdrawTaxConfig } from './withdraw-tax';
 import { HorseService } from 'src/horse/horse.service';
 import { itemUpgradeCost, successRate, upgradePoints } from 'src/data/item_progression';
 import { randomBytes } from 'crypto';
+import { itemCraftReq } from '../data/item_crafting';
 
 @Injectable()
 export class UserService {
@@ -1188,5 +1189,164 @@ export class UserService {
                 remainingBags,
             };
         }, { timeout: 10_000 }); // defensive: bound TX runtime
+    }
+
+    /**
+    * Craft an item using a predefined recipe:
+    * - Validates recipe exists
+    * - Ensures user is authorized and has required PHORSE, MEDALS, and materials
+    * - Deletes required materials (unequipped only), decrements balances
+    * - Mints exactly one crafted item
+    * - Idempotent when `idempotencyKey` is provided (safe retry)
+    */
+    async craftItem(
+        ownerWallet: string,
+        craftName: string,
+        idempotencyKey?: string
+    ): Promise<{ crafted: string; phorse: number; medals: number }> {
+        // 0) Basic input validation
+        if (typeof craftName !== 'string' || !craftName.trim()) {
+            throw new BadRequestException('Invalid item name');
+        }
+        const target = craftName.trim();
+
+        // 1) Recipe existence
+        const recipe = itemCraftReq[target as keyof typeof itemCraftReq];
+        if (!recipe) {
+            throw new BadRequestException(`"${target}" cannot be crafted`);
+        }
+
+        // 2) Target item definition must exist in items map
+        const def = (items as Record<string, any>)[target];
+        if (!def) {
+            throw new BadRequestException(
+                `No item definition found for "${target}" (cannot craft)`
+            );
+        }
+
+        // Extract currency costs and material requirements
+        const phorseCost = Number(recipe.phorse ?? 0);
+        const medalCost = Number(recipe.medals ?? 0);
+        const materialReqs = Object.entries(recipe).filter(
+            ([k]) => k !== 'phorse' && k !== 'medals'
+        ) as Array<[string, number]>;
+
+        return this.prisma.$transaction(async (tx) => {
+            // 3) User auth
+            const user = await tx.user.findUnique({
+                where: { wallet: ownerWallet },
+                select: { id: true },
+            });
+            if (!user) throw new NotFoundException('User not found');
+
+            // 4) Idempotency short-circuit (if already completed)
+            if (idempotencyKey) {
+                const existing = await tx.transaction.findFirst({
+                    where: {
+                        ownerId: user.id,
+                        type: TransactionType.ITEM,
+                        status: TransactionStatus.COMPLETED,
+                        note: { contains: `[CRAFT:${idempotencyKey}]` },
+                    },
+                    select: { id: true },
+                });
+                if (existing) {
+                    // Return current balances (idempotent outcome)
+                    const bal = await tx.user.findUnique({
+                        where: { id: user.id },
+                        select: { phorse: true, medals: true },
+                    });
+                    return { crafted: target, phorse: bal!.phorse, medals: bal!.medals };
+                }
+            }
+
+            // 5) Guarded currency decrement (single roundtrip)
+            if (phorseCost > 0 || medalCost > 0) {
+                const dec = await tx.user.updateMany({
+                    where: {
+                        id: user.id,
+                        phorse: { gte: phorseCost },
+                        medals: { gte: medalCost },
+                    },
+                    data: {
+                        ...(phorseCost > 0
+                            ? { phorse: { decrement: phorseCost }, totalPhorseSpent: { increment: phorseCost } }
+                            : {}),
+                        ...(medalCost > 0 ? { medals: { decrement: medalCost } } : {}),
+                        ...(phorseCost > 0
+                            ? { presalePhorse: { decrement: phorseCost } }
+                            : {}), // keep consistent with other spend paths
+                    },
+                });
+                if (dec.count === 0) {
+                    throw new BadRequestException(
+                        `Insufficient funds: need ${phorseCost} PHORSE and ${medalCost} MEDALS`
+                    );
+                }
+            }
+
+            // 6) Consume materials with concurrency-safe CTE deletes
+            //    For each distinct material: delete exactly N where horseId IS NULL
+            for (const [matName, qty] of materialReqs) {
+                const need = Number(qty) || 0;
+                if (need <= 0) continue;
+
+                // Raw SQL: delete top-N matching rows with SKIP LOCKED
+                const rows = await tx.$queryRaw<{ id: string }[]>`
+          WITH picked AS (
+            SELECT "id"
+            FROM "Item"
+            WHERE "ownerId" = ${user.id}
+              AND "name" = ${matName}
+              AND "horseId" IS NULL
+            ORDER BY "createdAt" ASC
+            LIMIT ${need}
+            FOR UPDATE SKIP LOCKED
+          )
+          DELETE FROM "Item"
+          WHERE "id" IN (SELECT "id" FROM picked)
+          RETURNING "id";
+        `;
+
+                if (!rows || rows.length !== need) {
+                    // Not enough materials — revert currency decrement by throwing
+                    throw new BadRequestException(
+                        `Not enough "${matName}" to craft "${target}" (need ${need})`
+                    );
+                }
+            }
+
+            // 7) Mint the crafted item
+            const created = await tx.item.create({
+                data: {
+                    ownerId: user.id,
+                    name: target,
+                    value: 1,
+                    breakable: Boolean(def.breakable),
+                    uses: def.breakable ? Number(def.uses) : null,
+                },
+                select: { id: true },
+            });
+
+            // 8) Log transaction (also stores idempotency tag)
+            const note = `Crafted "${target}" (PHORSE: ${phorseCost}, MEDALS: ${medalCost})${idempotencyKey ? ` [CRAFT:${idempotencyKey}]` : ''
+                }`;
+            const bal = await tx.user.findUnique({
+                where: { id: user.id },
+                select: { phorse: true, medals: true },
+            });
+
+            await tx.transaction.create({
+                data: {
+                    ownerId: user.id,
+                    type: TransactionType.ITEM,
+                    status: TransactionStatus.COMPLETED,
+                    value: 0,
+                    note,
+                },
+            });
+
+            return { crafted: target, phorse: bal!.phorse, medals: bal!.medals };
+        }, { timeout: 10_000 });
     }
 }

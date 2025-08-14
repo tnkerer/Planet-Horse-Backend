@@ -243,11 +243,11 @@ export class UserController {
     return this.users.setReferredBy(wallet, refCode);
   }
 
-   /**
-   * POST /user/items/open-bag
-   * Optional: Idempotency-Key header or { idempotencyKey?: string } in body
-   * Returns: { added: number; newMedals: number; remainingBags: number }
-   */
+  /**
+  * POST /user/items/open-bag
+  * Optional: Idempotency-Key header or { idempotencyKey?: string } in body
+  * Returns: { added: number; newMedals: number; remainingBags: number }
+  */
   @Throttle({ default: { limit: 15, ttl: 60_000 } })
   @Post('items/open-bag')
   async openMedalBag(
@@ -287,6 +287,31 @@ export class UserController {
       // eslint-disable-next-line no-console
       console.error('openMedalBag unexpected error');
       throw new BadRequestException('Could not open Medal Bag');
+    }
+  }
+
+  @Post('items/craft')
+  async craft(
+    @Request() req,
+    @Body() body: { name: string; idempotencyKey?: string }
+  ) {
+    if (!body || typeof body.name !== 'string' || !body.name.trim()) {
+      throw new BadRequestException('Body must include non-empty "name"');
+    }
+    const idemp =
+      typeof body.idempotencyKey === 'string' && body.idempotencyKey.trim()
+        ? body.idempotencyKey.trim()
+        : undefined;
+
+    try {
+      return await this.users.craftItem(req.user.wallet, body.name.trim(), idemp);
+    } catch (error) {
+      if (error?.status && error.status >= 400 && error.status < 500) {
+        throw error;
+      }
+      // eslint-disable-next-line no-console
+      console.error('craft unexpected error');
+      throw new BadRequestException('Could not craft item');
     }
   }
 }
