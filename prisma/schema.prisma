@@ -25,6 +25,7 @@ model User {
   createdAt    DateTime        @default(now())
   updatedAt    DateTime?       @updatedAt
   phorse       Float           @default(0)
+  wron         Float           @default(0)
   medals       Int             @default(0)
   totalPhorseEarned Float       @default(0)
   totalPhorseSpent  Float       @default(0)
@@ -84,7 +85,7 @@ model Horse {
   currentSpeed  Int
   currentEnergy Int
   maxEnergy     Int
-  foodUsed      Int       @default(0) // NEW COLUMN
+  foodUsed      Int       @default(0)
   equipments    Item[]
   lastRace      DateTime?
   lastEnergy    DateTime?
@@ -93,6 +94,7 @@ model Horse {
   raceHistory   RaceHistory[]
   presaleIntent PresaleIntent?  @relation(fields: [intentId], references: [id])
   intentId      String?
+  gen           Int       @default(0)
 
   @@index([ownerId])
 }

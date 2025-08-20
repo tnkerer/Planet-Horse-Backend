@@ -42,9 +42,9 @@ export class EnergyRecoveryService {
     return `in ${result}`;
   }
   // We no longer need to page through batches; a single UPDATE suffices.
-  @Cron('5 0 */6 * * *')
+  //@Cron('5 0 */6 * * *')
   //@Cron('30 * * * * *')
-  public async handleEnergyRecovery(): Promise<void> {
+  /* public async handleEnergyRecovery(): Promise<void> {
     this.logger.debug('⏰ Starting 6-hour energy-recovery cron (SQL version)…');
 
     // The SQL below does exactly:
@@ -94,5 +94,5 @@ export class EnergyRecoveryService {
         err.stack
       );
     }
-  }
+  } */
 }
