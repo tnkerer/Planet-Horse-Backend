@@ -1,4 +1,3 @@
-// src/data/xp_progression.ts (or wherever you keep lvlUpFee)
 export const lvlUpFee = {
   phorse: {
     1: 1000,

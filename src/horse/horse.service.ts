@@ -147,7 +147,7 @@ export class HorseService {
       // 1) Lookup user & their phorse/medals balance
       const user = await tx.user.findUnique({
         where: { wallet: ownerWallet },
-        select: { id: true, phorse: true, medals: true, totalPhorseSpent: true, presalePhorse: true },
+        select: { id: true, phorse: true, medals: true, totalPhorseSpent: true, burnScore: true, presalePhorse: true },
       });
       if (!user) throw new NotFoundException('User not found');
 
@@ -300,6 +300,7 @@ export class HorseService {
           data: {
             phorse: user.phorse - phorseCost,
             totalPhorseSpent: user.totalPhorseSpent + phorseCost,
+            burnScore: user.burnScore + phorseCost,
             presalePhorse: newPresale,
             medals: user.medals - medalCost,
           },
@@ -622,6 +623,7 @@ export class HorseService {
           medals: true,
           totalPhorseEarned: true,
           totalPhorseSpent: true,
+          burnScore: true,
           lastRace: true,
         },
       });
@@ -840,6 +842,7 @@ export class HorseService {
           data: {
             phorse: user.phorse + rawResults.reduce((s, r) => s + r.tokenReward, 0) - totalCost,
             totalPhorseSpent: user.totalPhorseSpent + totalCost,
+            burnScore: user.burnScore + totalCost,
             medals: user.medals + rawResults.reduce((s, r) => s + r.medalReward, 0),
             totalPhorseEarned: user.totalPhorseEarned + rawResults.reduce((s, r) => s + r.tokenReward, 0),
             ...(user.lastRace ? {} : { lastRace: new Date() })
@@ -909,7 +912,7 @@ export class HorseService {
       // 1) Find user
       const user = await tx.user.findUnique({
         where: { wallet: ownerWallet },
-        select: { id: true, phorse: true, totalPhorseSpent: true, presalePhorse: true },
+        select: { id: true, phorse: true, totalPhorseSpent: true, burnScore: true, presalePhorse: true },
       });
       if (!user) {
         throw new NotFoundException('User not found');
@@ -980,7 +983,7 @@ export class HorseService {
       const [updatedUser, updatedHorse] = await Promise.all([
         tx.user.update({
           where: { id: user.id },
-          data: { phorse: user.phorse - cost, totalPhorseSpent: user.totalPhorseSpent + cost, presalePhorse: newPresale },
+          data: { phorse: user.phorse - cost, totalPhorseSpent: user.totalPhorseSpent + cost, burnScore: user.burnScore + cost, presalePhorse: newPresale },
           select: { phorse: true },
         }),
         tx.horse.update({
@@ -1460,7 +1463,7 @@ export class HorseService {
       // 2. Find user by wallet
       const user = await tx.user.findUnique({
         where: { wallet: ownerWallet },
-        select: { id: true, phorse: true, totalPhorseSpent: true, presalePhorse: true },
+        select: { id: true, phorse: true, totalPhorseSpent: true, burnScore: true, presalePhorse: true },
       });
       if (!user) throw new NotFoundException('User not found');
 
@@ -1512,6 +1515,7 @@ export class HorseService {
           data: {
             phorse: user.phorse - COST,
             totalPhorseSpent: user.totalPhorseSpent + COST,
+            burnScore: user.burnScore + COST,
             presalePhorse: Math.max(user.presalePhorse - COST, 0),
           },
           select: { phorse: true },

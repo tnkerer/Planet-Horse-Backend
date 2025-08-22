@@ -132,6 +132,7 @@ export class UserService {
                 data: {
                     phorse: { decrement: totalCost },
                     totalPhorseSpent: { increment: totalCost },
+                    burnScore: { increment: totalCost },
                     presalePhorse: { decrement: totalCost }
                 },
             });
@@ -460,6 +461,7 @@ export class UserService {
                 data: {
                     phorse: { decrement: cost.phorse },
                     totalPhorseSpent: { increment: cost.phorse },
+                    burnScore: { increment: cost.phorse },
                     medals: { decrement: cost.medal },
                 }
             });
@@ -777,7 +779,8 @@ export class UserService {
                 },
                 data: {
                     phorse: { decrement: totalTax },
-                    totalPhorseSpent: { increment: totalTax }
+                    totalPhorseSpent: { increment: totalTax },
+                    burnScore: { increment: totalTax }
                 },
             });
             if (taxResult.count === 0) {
@@ -1270,7 +1273,7 @@ export class UserService {
                     },
                     data: {
                         ...(phorseCost > 0
-                            ? { phorse: { decrement: phorseCost }, totalPhorseSpent: { increment: phorseCost } }
+                            ? { phorse: { decrement: phorseCost }, totalPhorseSpent: { increment: phorseCost }, burnScore: { increment: phorseCost } }
                             : {}),
                         ...(medalCost > 0 ? { medals: { decrement: medalCost } } : {}),
                         ...(phorseCost > 0

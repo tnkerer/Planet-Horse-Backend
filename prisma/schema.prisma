@@ -46,6 +46,7 @@ model User {
   referralPhorseEarned Float @default(0)
   // Upgrade Score
   upgradeScore   Int             @default(0)
+  burnScore      Int             @default(0)
 }
 
 model ReferralXPLog {
