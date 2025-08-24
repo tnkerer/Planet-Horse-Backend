@@ -14,12 +14,13 @@ const softmax = (scores: number[]): number[] => {
   return exps.map(e => e / sum);
 };
 
-// <10: 1..10, 10–14: 1..9, 15–19: 1..8, 20–24: 1..7, >=25: 1..6
+
 const allowedMaxPosition = (level: number): number => {
-  if (level < 10) return 10;
-  if (level < 15) return 9;
-  if (level < 20) return 8;
-  return 7;
+  if (level < 5 ) return 10;
+  if (level < 10) return 9;
+  if (level < 15) return 8;
+  if (level < 20) return 7;
+  return 6;
 };
 
 // fair distribution using level, totalStats, baseDenominator, positionBoost
