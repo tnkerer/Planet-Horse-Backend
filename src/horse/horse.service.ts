@@ -20,6 +20,72 @@ export interface RewardsSuccess {
   position: number;
 }
 
+// === helper: stable softmax over an array of "scores" ===
+function softmax(scores: number[]): number[] {
+  const max = Math.max(...scores);
+  const exps = scores.map(s => Math.exp(s - max));
+  const sum = exps.reduce((a, b) => a + b, 0);
+  return exps.map(e => e / sum);
+}
+
+// === Build a shaped distribution for positions 1..10 ===
+function buildPositionDistribution({
+  level,
+  totalStats,
+  baseDenominator,     // globals["Base Denominator"]
+  positionBoost = 1.0, // from items (cap its effect!)
+}: {
+  level: number;
+  totalStats: number;
+  baseDenominator: number;
+  positionBoost?: number;
+}) {
+  // 1) Podium mass via sigmoid with gentle caps
+  const P_podium_min = 0.15;   // 15%
+  const P_podium_max = 0.50;   // 50% (cap so high levels don't guarantee podium)
+  const center = 15;           // mid-level center
+  const scale = 6;            // smoothness
+  const statTerm = Math.min(2.0, (totalStats / baseDenominator)); // small, capped
+  const z = (level - center) / scale + 0.35 * Math.log1p(statTerm); // add stat influence
+  let P_podium = P_podium_min + (P_podium_max - P_podium_min) * (1 / (1 + Math.exp(-z)));
+
+  // Items should not explode podium odds; cap small lift
+  P_podium = Math.min(P_podium * Math.min(1.10, positionBoost), 0.60); // hard cap 60%
+
+  // 2) Split podium across 1/2/3 with gentle preference for 1st
+  //    Lower beta_top -> flatter split
+  const beta_top = 0.35; // try 0.25–0.45
+  const podiumScores = [0, -beta_top, -2 * beta_top]; // 1st best, then 2nd, then 3rd
+  const podiumSplit = softmax(podiumScores); // length 3, sums to 1
+  const P1 = P_podium * podiumSplit[0];
+  const P2 = P_podium * podiumSplit[1];
+  const P3 = P_podium * podiumSplit[2];
+
+  // 3) Distribute non-podium mass 4..10 with bias to 4th but a live tail
+  const P_rest = 1 - P_podium;
+  const beta_mid = 0.20; // gentle slope; lower => flatter among 4..10
+  // scores for places 4..10: best is 4th (0), then decay
+  const midScores = [0, -beta_mid, -2 * beta_mid, -3 * beta_mid, -4 * beta_mid, -5 * beta_mid, -6 * beta_mid];
+  const midSplit = softmax(midScores); // length 7
+  const [P4, P5, P6, P7, P8, P9, P10] = midSplit.map(w => w * P_rest);
+
+  // Sanity: float drift fix
+  const sum = P1 + P2 + P3 + P4 + P5 + P6 + P7 + P8 + P9 + P10;
+  const norm = 1 / sum;
+  return [P1, P2, P3, P4, P5, P6, P7, P8, P9, P10].map(p => p * norm);
+}
+
+// === sample position 1..10 from distribution
+function samplePosition(dist: number[], rng: () => number = Math.random): number {
+  const r = rng();
+  let acc = 0;
+  for (let i = 0; i < dist.length; i++) {
+    acc += dist[i];
+    if (r <= acc) return i + 1; // positions are 1-based
+  }
+  return 10; // fallback
+}
+
 @Injectable()
 export class HorseService {
   constructor(private readonly prisma: PrismaService) { }
@@ -118,6 +184,8 @@ export class HorseService {
       }));
     });
   }
+
+
 
   /**
   * Performs a single‐level upgrade on `tokenId`:
@@ -408,18 +476,20 @@ export class HorseService {
       const baseMod = totalStats / (globals['Base Denominator'] as number);
       const baseXpMod = totalStats / 12;
 
-      const roll = Math.min(100, Math.random() * 100 * totalModifier.positionBoost);
-      const adjRoll = roll + 1 * horse.level;
+      const baseDenom = globals['Base Denominator'] as number;
 
-      const winrates = globals['Winrates'] as Record<string, number>;
-      const thresholds = Object.keys(winrates).map(parseFloat).sort((a, b) => a - b);
+      // build distribution
+      const dist = buildPositionDistribution({
+        level: horse.level,
+        totalStats,
+        baseDenominator: baseDenom,
+        positionBoost: totalModifier.positionBoost, // keep this effect subtle (as capped above)
+      });
 
-      let chosenThreshold = thresholds[0];
-      for (const t of thresholds) {
-        if (adjRoll >= t) chosenThreshold = t;
-        else break;
-      }
-      const position = winrates[chosenThreshold.toString()];
+      // draw a position
+      const position = samplePosition(dist);
+
+      // rewards follow from position as you already do
       const rewardsCfg = globals['Rewards'] as Record<string, readonly [number, number]>;
       const [xpBase, tokenBase] = rewardsCfg[position.toString()];
 
@@ -709,13 +779,18 @@ export class HorseService {
         const baseMod = totalStats / (globals['Base Denominator'] as number);
         const baseXpMod = totalStats / 12;
 
-        let roll = Math.random() * 100 * mods.positionBoost;
-        const adjRoll = roll + 1 * horse.level;
-        let chosen = winThresholds[0];
-        for (const t of winThresholds) {
-          if (adjRoll >= t) chosen = t; else break;
-        }
-        const position = winrates[chosen.toString()];
+        const baseDenom = globals['Base Denominator'] as number;
+
+        // build distribution
+        const dist = buildPositionDistribution({
+          level: horse.level,
+          totalStats,
+          baseDenominator: baseDenom,
+          positionBoost: mods.positionBoost, // keep this effect subtle (as capped above)
+        });
+
+        // draw a position
+        const position = samplePosition(dist);
         const [xpBase, tokBase] = rewardsCfg[position.toString()];
         const baseXp = Math.floor(xpBase * baseXpMod * xpMultGlobal);
         const xpReward = Math.floor(baseXp * mods.xpMultiplier);

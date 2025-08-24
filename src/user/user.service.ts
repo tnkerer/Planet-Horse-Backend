@@ -10,6 +10,9 @@ import { itemUpgradeCost, successRate, upgradePoints } from 'src/data/item_progr
 import { randomBytes } from 'crypto';
 import { itemCraftReq } from '../data/item_crafting';
 
+const WRON_SYMBOL = 'WRON';
+const PHORSE_SYMBOL = 'PHORSE';
+
 @Injectable()
 export class UserService {
     constructor(private readonly prisma: PrismaService, private readonly horseService: HorseService) { }
@@ -83,6 +86,14 @@ export class UserService {
             select: { medals: true },
         });
         return u?.medals;
+    }
+
+    async getWron(wallet: string) {
+        const u = await this.prisma.user.findUnique({
+            where: { wallet },
+            select: { wron: true },
+        });
+        return u?.wron;
     }
 
     // ------------------- ITEMS SECTION -----------------------
@@ -696,6 +707,7 @@ export class UserService {
                     value: amount,
                     note: `Requested withdraw of ${amount} PHORSE`,
                     txId: null,
+                    tokenSymbol: 'PHORSE',
                 },
             });
 
@@ -706,11 +718,94 @@ export class UserService {
                     request: Request.WITHDRAW,
                     value: amount,
                     transaction: { connect: { id: transaction.id } },
+                    tokenSymbol: 'PHORSE'
                 },
             });
 
             // 6) return the pending TX for client‐side tracking
             return { transactionId: transaction.id, message: `Transaction ${transaction.id.slice(0, 8)} added to the bridge queue!` };
+        });
+    }
+
+    /**
+     * 1. Validate amount
+     * 2. Atomically “reserve” WRON via a decrement-if-enough
+     * 3. Create a PENDING Transaction (tokenSymbol only; no tokenAddress)
+     * 4. Create the BridgeRequest pointing at that Transaction
+     * 5. All in one Prisma TX ⇒ full rollback on any failure
+     */
+    async wronWithdraw(ownerWallet: string, amount: number) {
+        // 1) sanity‐check
+        if (!Number.isFinite(amount) || amount <= 0) {
+            throw new BadRequestException('Invalid withdraw amount');
+        }
+
+        // Optional small anti-abuse: cap concurrent pending WRON withdrawals
+        const MAX_PENDING = 5;
+
+        return this.prisma.$transaction(async (tx) => {
+            // A) cheap guard to avoid queue spam
+            const pendingCount = await tx.transaction.count({
+                where: {
+                    type: TransactionType.WITHDRAW,
+                    status: TransactionStatus.PENDING,
+                    tokenSymbol: WRON_SYMBOL,
+                    owner: { wallet: ownerWallet },
+                },
+            });
+            if (pendingCount >= MAX_PENDING) {
+                throw new BadRequestException('Too many pending WRON withdrawals; please wait for processing.');
+            }
+
+            // 2) reserve the WRON balance (atomic decrement)
+            const dec = await tx.user.updateMany({
+                where: { wallet: ownerWallet, wron: { gte: amount } },
+                data: { wron: { decrement: amount } },
+            });
+            if (dec.count === 0) {
+                throw new BadRequestException('Insufficient WRON balance');
+            }
+
+            // 3) fetch the user’s internal id
+            const user = await tx.user.findUnique({
+                where: { wallet: ownerWallet },
+                select: { id: true },
+            });
+            if (!user) {
+                throw new NotFoundException('User not found');
+            }
+
+            // 4) create the PENDING withdrawal transaction
+            const transaction = await tx.transaction.create({
+                data: {
+                    owner: { connect: { id: user.id } },
+                    type: TransactionType.WITHDRAW,
+                    status: TransactionStatus.PENDING,
+                    value: amount,
+                    note: `Requested withdraw of ${amount} ${WRON_SYMBOL}`,
+                    txId: null,               // to be filled by CRON when it broadcasts on-chain
+                    tokenAddress: null,       // decoupled here
+                    tokenSymbol: WRON_SYMBOL, // this is enough for CRON to resolve later
+                },
+                select: { id: true },
+            });
+
+            // 5) create the BridgeRequest linked 1:1 to that transaction
+            await tx.bridgeRequest.create({
+                data: {
+                    owner: { connect: { id: user.id } },
+                    request: Request.WITHDRAW,
+                    value: amount,
+                    transaction: { connect: { id: transaction.id } },
+                    tokenSymbol: WRON_SYMBOL,
+                },
+            });
+
+            // 6) return the pending TX for client‐side tracking
+            return {
+                transactionId: transaction.id,
+                message: `Transaction ${transaction.id.slice(0, 8)} added to the bridge queue!`,
+            };
         });
     }
 

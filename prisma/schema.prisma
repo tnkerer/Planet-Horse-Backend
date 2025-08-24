@@ -13,48 +13,48 @@ datasource db {
 }
 
 model User {
-  id           String          @id @default(uuid())
-  wallet       String          @unique
-  name         String?
-  horses       Horse[]
-  items        Item[]
-  transactions Transaction[]
-  chests       Chest[]
-  requests     BridgeRequest[]
-  itemRequests ItemBridgeRequest[]
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime?       @updatedAt
-  phorse       Float           @default(0)
-  wron         Float           @default(0)
-  medals       Int             @default(0)
-  totalPhorseEarned Float       @default(0)
-  totalPhorseSpent  Float       @default(0)
-  presalePhorse     Float       @default(0)
-  lastRace      DateTime?
-    // Discord linking
-  discordId    String?  @unique
-  discordTag   String?
-  score        Score?
+  id                   String              @id @default(uuid())
+  wallet               String              @unique
+  name                 String?
+  horses               Horse[]
+  items                Item[]
+  transactions         Transaction[]
+  chests               Chest[]
+  requests             BridgeRequest[]
+  itemRequests         ItemBridgeRequest[]
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime?           @updatedAt
+  phorse               Float               @default(0)
+  wron                 Float               @default(0)
+  medals               Int                 @default(0)
+  totalPhorseEarned    Float               @default(0)
+  totalPhorseSpent     Float               @default(0)
+  presalePhorse        Float               @default(0)
+  lastRace             DateTime?
+  // Discord linking
+  discordId            String?             @unique
+  discordTag           String?
+  score                Score?
   // Referral System
-  refCode        String?  @unique
-  referredById   String?
-  referredBy     User?    @relation("UserReferrals", fields: [referredById], references: [id])
-  referrals      User[]   @relation("UserReferrals")
+  refCode              String?             @unique
+  referredById         String?
+  referredBy           User?               @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals            User[]              @relation("UserReferrals")
   // Referral Levels
-  xp             Int             @default(0)
-  referralLevel  Int             @default(1)
-  referralPhorseEarned Float @default(0)
+  xp                   Int                 @default(0)
+  referralLevel        Int                 @default(1)
+  referralPhorseEarned Float               @default(0)
   // Upgrade Score
-  upgradeScore   Int             @default(0)
-  burnScore      Int             @default(0)
+  upgradeScore         Int                 @default(0)
+  burnScore            Int                 @default(0)
 }
 
 model ReferralXPLog {
-  id           String   @id @default(uuid())
-  referrerId   String
-  refereeId    String
-  phorseSpent  Float
-  createdAt    DateTime @default(now())
+  id          String   @id @default(uuid())
+  referrerId  String
+  refereeId   String
+  phorseSpent Float
+  createdAt   DateTime @default(now())
 }
 
 model Nonce {
@@ -66,12 +66,12 @@ model Nonce {
 }
 
 model Horse {
-  id            String    @id @default(uuid())
-  tokenId       String    @unique
-  owner         User      @relation(fields: [ownerId], references: [id])
+  id            String         @id @default(uuid())
+  tokenId       String         @unique
+  owner         User           @relation(fields: [ownerId], references: [id])
   ownerId       String
   name          String
-  nickname      String?   @unique
+  nickname      String?        @unique
   sex           Sex
   status        Status
   rarity        String
@@ -86,20 +86,19 @@ model Horse {
   currentSpeed  Int
   currentEnergy Int
   maxEnergy     Int
-  foodUsed      Int       @default(0)
+  foodUsed      Int            @default(0)
   equipments    Item[]
   lastRace      DateTime?
   lastEnergy    DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime? @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime?      @updatedAt
   raceHistory   RaceHistory[]
-  presaleIntent PresaleIntent?  @relation(fields: [intentId], references: [id])
+  presaleIntent PresaleIntent? @relation(fields: [intentId], references: [id])
   intentId      String?
-  gen           Int       @default(0)
+  gen           Int            @default(0)
 
   @@index([ownerId])
 }
-
 
 model Item {
   id        String    @id @default(uuid())
@@ -126,7 +125,14 @@ model Transaction {
   txId      String?
   request   BridgeRequest?
   createdAt DateTime          @default(now())
-  updatedAt DateTime? @updatedAt
+  updatedAt DateTime?         @updatedAt
+
+  tokenAddress String?
+  tokenSymbol  String?
+
+  // For DEPOSIT rows we set (txId, type, tokenAddress), making duplicates impossible:
+  @@unique([txId, type, tokenAddress])
+  @@index([tokenAddress])
 }
 
 model Chest {
@@ -148,19 +154,25 @@ model BridgeRequest {
   transaction   Transaction @relation(fields: [transactionId], references: [id])
   transactionId String      @unique
   createdAt     DateTime    @default(now())
+
+  tokenSymbol   String?
+  tokenAddress  String?
+
+  @@index([tokenSymbol])
+  @@index([tokenAddress])
 }
 
 model ItemBridgeRequest {
-  id            String    @id @default(uuid())
-  owner         User        @relation(fields: [requesterId], references: [id])
-  requesterId   String
-  request       Request
-  quantity      Int
-  tokenId       Int
-  txId          String?
-  status        TransactionStatus
-  createdAt DateTime          @default(now())
-  updatedAt DateTime? @updatedAt
+  id          String            @id @default(uuid())
+  owner       User              @relation(fields: [requesterId], references: [id])
+  requesterId String
+  request     Request
+  quantity    Int
+  tokenId     Int
+  txId        String?
+  status      TransactionStatus
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime?         @updatedAt
 }
 
 enum Request {
@@ -202,28 +214,34 @@ model Meta {
 model Deposit {
   id          String   @id @default(uuid())
   amount      Decimal  @db.Decimal(78, 18)
-  txHash      String   @unique
+  txHash      String
   blockNumber Int
   from        String
   createdAt   DateTime @default(now())
+
+  tokenAddress String
+  tokenSymbol  String
+
+  @@unique([txHash, tokenAddress]) // replaces the old @unique on txHash
+  @@index([tokenAddress])
 }
 
 /// A historical record of each race result for a given horse
 model RaceHistory {
-  id            String    @id @default(uuid())
-  createdAt     DateTime  @default(now())
-  phorseEarned  Float
-  xpEarned      Int
-  position      Int
-  horse         Horse     @relation(fields: [horseId], references: [id])
-  horseId       String
+  id           String   @id @default(uuid())
+  createdAt    DateTime @default(now())
+  phorseEarned Float
+  xpEarned     Int
+  position     Int
+  horse        Horse    @relation(fields: [horseId], references: [id])
+  horseId      String
 
   @@index([horseId])
 }
 
 model PresaleIntent {
-  id            String    @id @default(uuid())
-  createdAt     DateTime  @default(now())
+  id            String      @id @default(uuid())
+  createdAt     DateTime    @default(now())
   amount        Int
   wallet        String
   status        IntentStage
@@ -238,10 +256,10 @@ enum IntentStage {
 }
 
 model Score {
-  id        String  @id @default(uuid())
-  user      User    @relation(fields: [userId], references: [id])
-  userId    String  @unique
-  points    Int     @default(0)
-  createdAt DateTime @default(now())
+  id        String    @id @default(uuid())
+  user      User      @relation(fields: [userId], references: [id])
+  userId    String    @unique
+  points    Int       @default(0)
+  createdAt DateTime  @default(now())
   updatedAt DateTime? @updatedAt
 }

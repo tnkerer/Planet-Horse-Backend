@@ -67,6 +67,7 @@ export class AppModule implements NestModule {
         { path: 'user/items/open-bag', method: RequestMethod.POST },
         { path: 'user/items/craft', method: RequestMethod.POST },
         { path: 'user/withdraw', method: RequestMethod.POST },
+        { path: 'user/withdraw/wron', method: RequestMethod.POST },
         { path: 'user/item-withdraw', method: RequestMethod.POST },
         { path: 'user/link-discord', method: RequestMethod.POST },
         { path: 'user/ref-code', method: RequestMethod.POST },

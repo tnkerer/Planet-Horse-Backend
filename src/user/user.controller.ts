@@ -5,6 +5,9 @@ import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { RecycleDto } from './dto/recycle.dto';
 import { UpgradeItemDto } from './dto/upgrade-item.dto';
 
+const WRON_MIN = 0.1;   // tune these as you prefer
+const WRON_MAX = 1000;
+
 @Controller('user')
 @UseGuards(JwtAuthGuard, ThrottlerGuard)
 export class UserController {
@@ -15,10 +18,11 @@ export class UserController {
     // req.user.wallet comes from JwtStrategy.validate()
     const phorse = await this.users.getBalance(req.user.wallet);
     const medals = await this.users.getMedals(req.user.wallet);
-    if (phorse === null || phorse === undefined) {
+    const wron = await this.users.getWron(req.user.wallet);
+    if (phorse === null || phorse === undefined || wron === undefined) {
       throw new NotFoundException('User not found');
     }
-    return { phorse, medals };
+    return { phorse, medals, wron };
   }
 
   /**
@@ -146,10 +150,34 @@ export class UserController {
     return this.users.phorseWithdraw(req.user.wallet, amount);
   }
 
+  @Throttle({ default: { limit: 25, ttl: 60_000 } })
+  @Post('withdraw/wron')
+  async withdrawWron(
+    @Request() req,
+    @Body() body: any = {},
+  ): Promise<{ transactionId: string }> {
+    if (typeof body !== 'object' || body === null) {
+      throw new BadRequestException('Request body must be JSON');
+    }
+
+    const amount = body.amount;
+    if (typeof amount !== 'number') {
+      throw new BadRequestException('Request body must include a numeric "amount"');
+    }
+    if (amount < WRON_MIN) {
+      throw new BadRequestException(`Amount must be greater than or equal to ${WRON_MIN}`);
+    }
+    if (amount > WRON_MAX) {
+      throw new BadRequestException(`Amount must be lower than or exactly ${WRON_MAX}`);
+    }
+
+    return this.users.wronWithdraw(req.user.wallet, amount);
+  }
+
   /**
-* POST /user/item-withdraw
-* Body: { name: string; quantity: number }
-*/
+  * POST /user/item-withdraw
+  * Body: { name: string; quantity: number }
+  */
   @Throttle({ default: { limit: 25, ttl: 60_000 } })
   @Post('item-withdraw')
   async itemWithdraw(
