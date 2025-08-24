@@ -20,60 +20,73 @@ export interface RewardsSuccess {
   position: number;
 }
 
-// === helper: stable softmax over an array of "scores" ===
-function softmax(scores: number[]): number[] {
-  const max = Math.max(...scores);
-  const exps = scores.map(s => Math.exp(s - max));
+// helpers
+const softmax = (scores: number[]): number[] => {
+  const m = Math.max(...scores);
+  const exps = scores.map(s => Math.exp(s - m));
   const sum = exps.reduce((a, b) => a + b, 0);
   return exps.map(e => e / sum);
-}
+};
 
-// === Build a shaped distribution for positions 1..10 ===
-function buildPositionDistribution({
+// <10: 1..10, 10–14: 1..9, 15–19: 1..8, 20–24: 1..7, >=25: 1..6
+const allowedMaxPosition = (level: number): number => {
+  if (level < 10) return 10;
+  if (level < 15) return 9;
+  if (level < 20) return 8;
+  return 7;
+};
+
+// fair distribution using level, totalStats, baseDenominator, positionBoost
+export function buildPositionDistribution({
   level,
-  totalStats,
-  baseDenominator,     // globals["Base Denominator"]
-  positionBoost = 1.0, // from items (cap its effect!)
+  positionBoost = 1.0,
 }: {
   level: number;
-  totalStats: number;
-  baseDenominator: number;
   positionBoost?: number;
-}) {
-  // 1) Podium mass via sigmoid with gentle caps
-  const P_podium_min = 0.15;   // 15%
-  const P_podium_max = 0.50;   // 50% (cap so high levels don't guarantee podium)
-  const center = 15;           // mid-level center
-  const scale = 6;            // smoothness
-  const statTerm = Math.min(2.0, (totalStats / baseDenominator)); // small, capped
-  const z = (level - center) / scale + 0.35 * Math.log1p(statTerm); // add stat influence
-  let P_podium = P_podium_min + (P_podium_max - P_podium_min) * (1 / (1 + Math.exp(-z)));
+}): number[] {
+  // podium mass depends only on level (sigmoid), then scaled by item boost
+  const Pmin = 0.15;
+  const Pmax = 0.55;
+  const center = 15;
+  const scale = 6;
+  const z = (level - center) / scale;
+  let Ppodium = Pmin + (Pmax - Pmin) * (1 / (1 + Math.exp(-z)));
 
-  // Items should not explode podium odds; cap small lift
-  P_podium = Math.min(P_podium * Math.min(1.10, positionBoost), 0.60); // hard cap 60%
+  Ppodium *= Math.max(0.0, positionBoost);        // allow any boost >= 0
+  Ppodium = Math.max(0, Math.min(Ppodium, 0.80)); // safety ceiling
 
-  // 2) Split podium across 1/2/3 with gentle preference for 1st
-  //    Lower beta_top -> flatter split
-  const beta_top = 0.35; // try 0.25–0.45
-  const podiumScores = [0, -beta_top, -2 * beta_top]; // 1st best, then 2nd, then 3rd
-  const podiumSplit = softmax(podiumScores); // length 3, sums to 1
-  const P1 = P_podium * podiumSplit[0];
-  const P2 = P_podium * podiumSplit[1];
-  const P3 = P_podium * podiumSplit[2];
+  // split 1–3
+  const betaTop = 0.32;
+  const podiumSplit = softmax([0, -betaTop, -2 * betaTop]);
+  const P3 = Ppodium * podiumSplit[0];
+  const P2 = Ppodium * podiumSplit[1];
+  const P1 = Ppodium * podiumSplit[2];
 
-  // 3) Distribute non-podium mass 4..10 with bias to 4th but a live tail
-  const P_rest = 1 - P_podium;
-  const beta_mid = 0.20; // gentle slope; lower => flatter among 4..10
-  // scores for places 4..10: best is 4th (0), then decay
-  const midScores = [0, -beta_mid, -2 * beta_mid, -3 * beta_mid, -4 * beta_mid, -5 * beta_mid, -6 * beta_mid];
-  const midSplit = softmax(midScores); // length 7
-  const [P4, P5, P6, P7, P8, P9, P10] = midSplit.map(w => w * P_rest);
+  // split mids among allowed positions only
+  const maxPos = allowedMaxPosition(level);       // <10:10, <15:9, <20:8, <25:7, else:6
+  const midCount = Math.max(0, maxPos - 3);       // positions 4..maxPos
+  const Prest = Math.max(0, 1 - Ppodium);
 
-  // Sanity: float drift fix
-  const sum = P1 + P2 + P3 + P4 + P5 + P6 + P7 + P8 + P9 + P10;
-  const norm = 1 / sum;
-  return [P1, P2, P3, P4, P5, P6, P7, P8, P9, P10].map(p => p * norm);
+  let mids: number[] = [];
+  if (midCount > 0) {
+    const betaMid = 0.18 + 0.04 * ((level - 1) / 29);
+    const midScores = Array.from({ length: midCount }, (_, i) => -i * betaMid);
+    const midSplit = softmax(midScores);
+    mids = midSplit.map(w => w * Prest);
+  }
+
+  // assemble P1..P10, zeroing disallowed
+  const probs = Array(10).fill(0);
+  probs[0] = P1; probs[1] = P2; probs[2] = P3;
+  for (let i = 0; i < mids.length; i++) probs[3 + i] = mids[i];
+
+  // normalize
+  const s = probs.reduce((a, b) => a + b, 0) || 1;
+  for (let i = 0; i < probs.length; i++) probs[i] = probs[i] / s;
+
+  return probs;
 }
+
 
 // === sample position 1..10 from distribution
 function samplePosition(dist: number[], rng: () => number = Math.random): number {
@@ -81,7 +94,7 @@ function samplePosition(dist: number[], rng: () => number = Math.random): number
   let acc = 0;
   for (let i = 0; i < dist.length; i++) {
     acc += dist[i];
-    if (r <= acc) return i + 1; // positions are 1-based
+    if (r <= acc) return i + 1;
   }
   return 10; // fallback
 }
@@ -481,8 +494,6 @@ export class HorseService {
       // build distribution
       const dist = buildPositionDistribution({
         level: horse.level,
-        totalStats,
-        baseDenominator: baseDenom,
         positionBoost: totalModifier.positionBoost, // keep this effect subtle (as capped above)
       });
 
@@ -784,8 +795,6 @@ export class HorseService {
         // build distribution
         const dist = buildPositionDistribution({
           level: horse.level,
-          totalStats,
-          baseDenominator: baseDenom,
           positionBoost: mods.positionBoost, // keep this effect subtle (as capped above)
         });
 

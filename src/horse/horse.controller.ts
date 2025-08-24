@@ -146,9 +146,9 @@ export class HorseController {
   }
 
   /**
-   * PUT /horses/:tokenId/change-nickname
-   * Body: { nickname: string }
-   */
+  * PUT /horses/:tokenId/change-nickname
+  * Body: { nickname: string }
+  */
   @UseGuards(IsOwnerGuard)
   @Put(':tokenId/change-nickname')
   @Throttle({ default: { limit: 50, ttl: 60_000 } }) // Limit abuse of nickname changes
