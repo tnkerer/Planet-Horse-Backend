@@ -96,7 +96,7 @@ function samplePosition(dist: number[], rng: () => number = Math.random): number
     acc += dist[i];
     if (r <= acc) return i + 1;
   }
-  return 10; // fallback
+  return 6; // fallback
 }
 
 @Injectable()

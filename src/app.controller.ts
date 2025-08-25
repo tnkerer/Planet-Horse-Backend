@@ -1,5 +1,7 @@
-import { BadRequestException, Body, Controller, Get, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Res } from '@nestjs/common';
+import { Response } from 'express';
 import { AppService } from './app.service';
+import { Throttle } from '@nestjs/throttler';
 
 interface SimulateRaceDto {
   level: number;
@@ -16,7 +18,7 @@ const softmax = (scores: number[]): number[] => {
 
 
 const allowedMaxPosition = (level: number): number => {
-  if (level < 5 ) return 10;
+  if (level < 5) return 10;
   if (level < 10) return 9;
   if (level < 15) return 8;
   if (level < 20) return 7;
@@ -83,7 +85,7 @@ function samplePosition(dist: number[], rng: () => number = Math.random): number
     acc += dist[i];
     if (r <= acc) return i + 1;
   }
-  return 10; // fallback
+  return 6; // fallback
 }
 
 @Controller()
@@ -115,5 +117,16 @@ export class AppController {
       distribution: dist,            // array of 10 probabilities (sum ≈ 1)
       position,                      // 1..10 (subject to level-based removal)
     };
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Get('metadata/horse/:tokenId')
+  async getHorseMetadata(@Param('tokenId') tokenId: string, @Res() res: Response) {
+    const json = await this.appService.getHorseMetadata(tokenId);
+    res
+      .setHeader('Content-Type', 'application/json; charset=utf-8')
+      .setHeader('Cache-Control', 'public, max-age=300, s-maxage=300')
+      .status(200)
+      .send(JSON.stringify(json));
   }
 }

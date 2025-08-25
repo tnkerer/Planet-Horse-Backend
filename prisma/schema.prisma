@@ -97,7 +97,13 @@ model Horse {
   intentId      String?
   gen           Int            @default(0)
 
-  @@index([ownerId])
+    // NEW: how many trait slots this horse may fill now (2..5)
+  traitSlotsUnlocked Int @default(2)
+
+  // NEW: relation to the per-horse trait rows
+  traits       HorseTrait[]
+
+  @@index([ownerId])  
 }
 
 model Item {
@@ -173,6 +179,41 @@ model ItemBridgeRequest {
   status      TransactionStatus
   createdAt   DateTime          @default(now())
   updatedAt   DateTime?         @updatedAt
+}
+
+enum TraitTier {
+  COMMON
+  RARE
+  MYTHIC
+}
+
+model TraitCatalog {
+  id    Int    @id    // 1..10 (Racecraft, Iron Hooves, ...)
+  name  String @unique
+  // add a "key" if you like (e.g., "racecraft")
+  HorseTraits HorseTrait[]
+}
+
+model HorseTrait {
+  id        String   @id @default(uuid())
+  horse     Horse    @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  horseId   String
+
+  // slot 1..5, unique per horse
+  slot      Int
+
+  // which trait and tier
+  trait     TraitCatalog @relation(fields: [traitId], references: [id])
+  traitId   Int
+  tier      TraitTier    @default(COMMON)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([horseId, slot])        // only one trait per slot
+  @@unique([horseId, traitId])     // cannot duplicate the same trait on a horse
+  @@index([horseId])
+  @@index([traitId])
 }
 
 enum Request {
