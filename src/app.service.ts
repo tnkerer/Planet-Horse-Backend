@@ -40,12 +40,12 @@ export class AppService {
   private slugifyName(name: string): string {
     return (name || '')
       .normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, '')       // remove diacritics
+      .replace(/[\u0300-\u036f]/g, '')   // remove diacritics
       .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '')          // strip non-alphanum
+      .replace(/[^a-z0-9\s'-]/g, '')     // allow letters, digits, space, apostrophe, hyphen
       .trim()
-      .replace(/\s+/g, '-')                  // spaces -> hyphens
-      .replace(/-+/g, '-');
+      .replace(/\s+/g, '-')              // spaces -> hyphens
+      .replace(/-+/g, '-');              // collapse multiple hyphens
   }
 
   /** Build image URL: https://planethorse.io/assets/game/horses/gifs/${rarity}/${name-slug}-running.gif */
