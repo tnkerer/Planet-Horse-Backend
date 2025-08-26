@@ -1182,7 +1182,7 @@ export const itemModifiers = {
         extraPwr: 0,
     },
     "Pumpers": {
-        positionBoost: 1.15,
+        positionBoost: 1.18,
         hurtRate: 0.6,
         xpMultiplier: 1,
         energySaved: 0,
