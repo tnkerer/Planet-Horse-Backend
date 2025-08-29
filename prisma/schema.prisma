@@ -17,6 +17,7 @@ model User {
   wallet               String              @unique
   name                 String?
   horses               Horse[]
+  breeds               Breed[]
   items                Item[]
   transactions         Transaction[]
   chests               Chest[]
@@ -109,6 +110,16 @@ model Horse {
   parents            Int[]
 
   @@index([ownerId])  
+}
+
+model Breed {
+ id            String         @id @default(uuid())
+ owner         User           @relation(fields: [ownerId], references: [id])
+ ownerId       String
+ parents       Int[]
+ tokenId       Int?
+ started       DateTime?
+ finalized     Boolean
 }
 
 model Item {

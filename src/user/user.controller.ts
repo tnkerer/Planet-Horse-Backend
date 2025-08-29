@@ -1,10 +1,11 @@
-import { Controller, Get, UseGuards, Request, NotFoundException, Post, Body, BadRequestException } from '@nestjs/common';
+import { Controller, Get, UseGuards, Request, NotFoundException, Post, Body, BadRequestException, Query, Req } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UserService } from './user.service';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { RecycleDto } from './dto/recycle.dto';
 import { UpgradeItemDto } from './dto/upgrade-item.dto';
 import { IsPairOwnerGuard } from 'src/guards/is-pair-owner.guard';
+import { ActiveBreedsLimitGuard } from 'src/guards/active-breeds-limit-guard';
 
 const WRON_MIN = 0.1;   // tune these as you prefer
 const WRON_MAX = 1000;
@@ -374,11 +375,30 @@ export class UserController {
   * Body: { "a": "<parentTokenIdA>", "b": "<parentTokenIdB>" }
   */
   @Post('breed')
-  @UseGuards(IsPairOwnerGuard)
+  @UseGuards(IsPairOwnerGuard, ActiveBreedsLimitGuard)
   @Throttle({ default: { limit: 25, ttl: 60_000 } })
   async breed(@Body() body: BreedDto) {
     const { a, b } = body || {};
     if (!a || !b) throw new BadRequestException('Both token IDs (a, b) are required');
     return this.users.breedHorsesByTokenIds(a, b);
   }
+
+  // GET /breed/preflight?a=123&b=456
+  @Get('preflight')
+  async preflight(@Query('a') a: string, @Query('b') b: string, @Req() req) {
+    const wallet = (req.user.wallet as string).toLowerCase();
+    return this.users.preflightBreedByTokenIds(wallet, a, b);
+  }
+
+  // GET /breed?finalizedOnly=true
+  @Get('breed')
+  async listBreeds(@Req() req, @Query('notFinalizedOnly') finalizedOnly?: string) {
+    const wallet = (req.user.wallet as string).toLowerCase();
+    const only = typeof finalizedOnly === 'string'
+      ? ['1', 'true', 'yes'].includes(finalizedOnly.toLowerCase())
+      : false;
+
+    return this.users.listBreedsByOwner(wallet, !only);
+  }
+
 }

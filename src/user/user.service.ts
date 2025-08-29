@@ -70,6 +70,13 @@ export class UserService {
 
         const [p1, p2] = parents;
 
+        const activeCount = await this.prisma.breed.count({
+            where: { ownerId: p1.ownerId, finalized: false },
+        });
+        if (activeCount >= 2) {
+            throw new BadRequestException('You already have two active breedings');
+        }
+
         // Same owner
         if (p1.ownerId !== p2.ownerId) {
             throw new BadRequestException('Both parents must share the same owner');
@@ -142,6 +149,19 @@ export class UserService {
         // IMPORTANT: pass TOKEN IDs here (not internal DB ids)
         const { phorseCost, ronCost } = await this.calculateBreedCosts(tokenIdA, tokenIdB);
 
+        // Prevent duplicate “in-flight” breed for the same pair & owner
+        const existing = await this.prisma.breed.findFirst({
+            where: {
+                ownerId: p1.ownerId,
+                finalized: false,
+                parents: { hasEvery: [numA, numB] }, // works with Postgres int[]; order-independent
+            },
+            select: { id: true },
+        });
+        if (existing) {
+            throw new BadRequestException('There is already a pending breeding for this pair');
+        }
+
         // --- Determine child rarity from lower tier chances, name, stats, etc. ---
         // Lower tier (for breeding chances)
         const tierOrder = { Common: 0, Uncommon: 1, Rare: 2, Epic: 3, Legendary: 4, Mythic: 5 };
@@ -210,9 +230,9 @@ export class UserService {
 
         // Next numeric tokenId = MAX(tokenId numeric) + 1 (use one raw SQL)
         const [{ maxToken }] = await this.prisma.$queryRaw<{ maxToken: bigint | null }[]>`
-    SELECT MAX(CASE WHEN "tokenId" ~ '^[0-9]+$' THEN ("tokenId")::bigint ELSE NULL END) AS "maxToken"
-    FROM "Horse"
-  `;
+        SELECT MAX(CASE WHEN "tokenId" ~ '^[0-9]+$' THEN ("tokenId")::bigint ELSE NULL END) AS "maxToken"
+        FROM "Horse"
+        `;
         const nextTokenId = ((maxToken ?? BigInt(0)) + BigInt(1)).toString();
 
         // --- Atomic transaction: reserve balances, recheck & bump parents, create child, log ---
@@ -257,6 +277,24 @@ export class UserService {
                 data: { currentBreeds: { increment: 1 }, status: 'BREEDING', lastBreeding: new Date() },
             });
             if (recheckB.count === 0) throw new BadRequestException(`Parent ${p2.tokenId} no longer eligible`);
+
+            const active = await tx.breed.count({
+                where: { ownerId: p1.ownerId, finalized: false },
+            });
+            if (active >= 2) {
+                throw new BadRequestException('You already have two active breedings');
+            }
+
+            const breed = await tx.breed.create({
+                data: {
+                    ownerId: p1.ownerId,
+                    parents: [numA, numB],
+                    started: new Date(),
+                    tokenId: Number(nextTokenId),
+                    finalized: false,
+                },
+                select: { id: true, parents: true, started: true, finalized: true },
+            });
 
             // Create child
             const child = await tx.horse.create({
@@ -310,8 +348,194 @@ export class UserService {
             return {
                 child,
                 costs: { phorseCost, ronCost },
+                breed
             };
         }, { timeout: 10_000 });
+    }
+
+    async preflightBreedByTokenIds(
+        callerWallet: string,
+        tokenIdA: string,
+        tokenIdB: string
+    ): Promise<{
+        eligible: boolean;
+        reasons: string[];
+        costs?: { phorseCost: number; ronCost: number };
+        parents?: Array<{
+            tokenId: string;
+            sex: 'MALE' | 'FEMALE';
+            rarity: string;
+            level: number;
+            currentBreeds: number;
+            maxBreeds: number | null;
+            status: string;
+            ownedSince: string | null;
+        }>;
+    }> {
+        const reasons: string[] = [];
+
+        // Basic input checks
+        if (!tokenIdA || !tokenIdB) {
+            throw new BadRequestException('Both token IDs are required');
+        }
+        if (tokenIdA === tokenIdB) {
+            reasons.push('Use two distinct parents');
+        }
+
+        const isNumeric = (s: string) => /^\d+$/.test(s);
+        if (!isNumeric(tokenIdA) || !isNumeric(tokenIdB)) {
+            reasons.push('Breeding requires numeric tokenIds');
+        }
+        const numA = Number(tokenIdA);
+        const numB = Number(tokenIdB);
+
+        // Find caller (auth required)
+        const caller = await this.prisma.user.findUnique({
+            where: { wallet: callerWallet.toLowerCase() },
+            select: { id: true },
+        });
+        if (!caller) throw new NotFoundException('User not found');
+
+        // Fetch both parents in one roundtrip
+        const parents = await this.prisma.horse.findMany({
+            where: { tokenId: { in: [tokenIdA, tokenIdB] } },
+            select: {
+                id: true, tokenId: true, ownerId: true, sex: true, status: true, rarity: true,
+                level: true, currentBreeds: true, ownedSince: true, gen: true,
+                basePower: true, baseSprint: true, baseSpeed: true,
+                parents: true,
+                maxBreeds: true,
+            },
+        });
+
+        if (parents.length !== 2) {
+            const found = new Set(parents.map(p => p.tokenId));
+            const missing = [tokenIdA, tokenIdB].filter(t => !found.has(t));
+            reasons.push(`Parent(s) not found: ${missing.join(', ')}`);
+        }
+
+        // If both resolved, run validations (no DB writes)
+        if (parents.length === 2) {
+            const [p1, p2] = parents;
+
+            // Caller must own both (and both parents must share the same owner)
+            if (p1.ownerId !== caller.id || p2.ownerId !== caller.id) {
+                reasons.push('You must be the owner of both parents');
+            }
+            if (p1.ownerId !== p2.ownerId) {
+                reasons.push('Both parents must share the same owner');
+            }
+
+            // Sex rule (one MALE, one FEMALE)
+            const hasMale = p1.sex === 'MALE' || p2.sex === 'MALE';
+            const hasFemale = p1.sex === 'FEMALE' || p2.sex === 'FEMALE';
+            if (!hasMale || !hasFemale) {
+                reasons.push('Parents must be one MALE and one FEMALE');
+            }
+
+            // Status must be IDLE
+            if (p1.status !== 'IDLE' || p2.status !== 'IDLE') {
+                reasons.push('Both parents must be IDLE');
+            }
+
+            // Owned ≥ 72h
+            const now = Date.now();
+            const minOwnedMs = 72 * 60 * 60 * 1000;
+            const ownedA = p1.ownedSince ? now - p1.ownedSince.getTime() : 0;
+            const ownedB = p2.ownedSince ? now - p2.ownedSince.getTime() : 0;
+            if (ownedA < minOwnedMs || ownedB < minOwnedMs) {
+                reasons.push('You must own both parents for at least 72 hours');
+            }
+
+            // Level must be currentBreeds + 1 (per parent)
+            if (p1.level < (p1.currentBreeds ?? 0) + 1) {
+                reasons.push(`Parent ${p1.tokenId} level is too low for a new breed`);
+            }
+            if (p2.level < (p2.currentBreeds ?? 0) + 1) {
+                reasons.push(`Parent ${p2.tokenId} level is too low for a new breed`);
+            }
+
+            // Max breed limits (use per-horse maxBreeds)
+            if ((p1.currentBreeds ?? 0) >= (p1.maxBreeds ?? 0)) {
+                reasons.push(`Parent ${p1.tokenId} reached its breed limit`);
+            }
+            if ((p2.currentBreeds ?? 0) >= (p2.maxBreeds ?? 0)) {
+                reasons.push(`Parent ${p2.tokenId} reached its breed limit`);
+            }
+
+            // Incest checks: parent↔child or siblings
+            const p1Parents = (p1.parents ?? []);
+            const p2Parents = (p2.parents ?? []);
+            if (p1Parents.includes(numB) || p2Parents.includes(numA)) {
+                reasons.push('Breeding between parent and child is not allowed');
+            }
+            if (p1Parents.length && p2Parents.length && p1Parents.some(pid => p2Parents.includes(pid))) {
+                reasons.push('Breeding between siblings is not allowed');
+            }
+
+            // Pending (unfinalized) breeding for this owner & pair?
+            const pending = await this.prisma.breed.findFirst({
+                where: {
+                    ownerId: caller.id,
+                    finalized: false,
+                    parents: { hasEvery: [numA, numB] },
+                },
+                select: { id: true },
+            });
+            if (pending) {
+                reasons.push('There is already a pending breeding for this pair');
+            }
+        }
+
+        // Try compute costs (helpful even if ineligible; if oracle fails, add reason)
+        let costs: { phorseCost: number; ronCost: number } | undefined = undefined;
+        try {
+            const c = await this.calculateBreedCosts(tokenIdA, tokenIdB);
+            costs = c;
+        } catch (e: any) {
+            reasons.push('Unable to fetch breeding costs at the moment');
+        }
+
+        // Lightweight parent echo (for UI)
+        const parentsEcho =
+            parents.length === 2
+                ? parents.map(p => ({
+                    tokenId: p.tokenId,
+                    sex: p.sex as 'MALE' | 'FEMALE',
+                    rarity: p.rarity,
+                    level: p.level,
+                    currentBreeds: p.currentBreeds ?? 0,
+                    maxBreeds: p.maxBreeds ?? null,
+                    status: p.status,
+                    ownedSince: p.ownedSince ? p.ownedSince.toISOString() : null,
+                }))
+                : undefined;
+
+        return {
+            eligible: reasons.length === 0,
+            reasons,
+            ...(costs ? { costs } : {}),
+            ...(parentsEcho ? { parents: parentsEcho } : {}),
+        };
+    }
+
+    async listBreedsByOwner(
+        ownerWallet: string,
+        finalizedOnly?: boolean
+    ) {
+        const user = await this.prisma.user.findUnique({
+            where: { wallet: ownerWallet.toLowerCase() },
+            select: { id: true },
+        });
+        if (!user) throw new NotFoundException('User not found');
+
+        return this.prisma.breed.findMany({
+            where: {
+                ownerId: user.id,
+                ...(finalizedOnly ? { finalized: true } : {}),
+            },
+            orderBy: [{ started: 'desc' } as any].filter(Boolean),
+        });
     }
 
     /**
@@ -406,11 +630,11 @@ export class UserService {
     // USD base by lowest rarity
     private readonly breedBaseUsd: Record<Rarity, number> = {
         COMMON: 10,
-        UNCOMMON: 12.5,
-        RARE: 15,
-        EPIC: 17.5,
-        LEGENDARY: 20,
-        MYTHIC: 22.5,
+        UNCOMMON: 15,
+        RARE: 20,
+        EPIC: 25,
+        LEGENDARY: 30,
+        MYTHIC: 40,
     };
 
     private readonly breedBaseRon: Record<number, number> = {
