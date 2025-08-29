@@ -4,9 +4,12 @@ import { UserService } from './user.service';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { RecycleDto } from './dto/recycle.dto';
 import { UpgradeItemDto } from './dto/upgrade-item.dto';
+import { IsPairOwnerGuard } from 'src/guards/is-pair-owner.guard';
 
 const WRON_MIN = 0.1;   // tune these as you prefer
 const WRON_MAX = 1000;
+
+class BreedDto { a!: string; b!: string; }
 
 @Controller('user')
 @UseGuards(JwtAuthGuard, ThrottlerGuard)
@@ -341,5 +344,41 @@ export class UserController {
       console.error('craft unexpected error');
       throw new BadRequestException('Could not craft item');
     }
+  }
+
+  @Get('oracle/phorse')
+  @Throttle({ default: { limit: 25, ttl: 60_000 } })
+  phorseOracle() {
+    return this.users.getPhorseUsdOracle();
+  }
+
+  /**
+  * POST /user/breed-cost
+  * Body: { "a": "<horseIdA>", "b": "<horseIdB>" }
+  * Returns: { cost, breakdown: { lowestRarity, baseUsd, totalCurrentBreeds, usdPriceFormatted } }
+  */
+  @Get('breed/cost')
+  @Throttle({ default: { limit: 25, ttl: 60_000 } })
+  async calculateBreedCost(@Body() body: BreedDto) {
+    const { a, b } = body;
+
+    if (!a || !b) {
+      throw new BadRequestException('Both horse IDs (a, b) are required');
+    }
+
+    return this.users.calculateBreedCosts(a, b);
+  }
+
+  /**
+  * POST /user/breed
+  * Body: { "a": "<parentTokenIdA>", "b": "<parentTokenIdB>" }
+  */
+  @Post('breed')
+  @UseGuards(IsPairOwnerGuard)
+  @Throttle({ default: { limit: 25, ttl: 60_000 } })
+  async breed(@Body() body: BreedDto) {
+    const { a, b } = body || {};
+    if (!a || !b) throw new BadRequestException('Both token IDs (a, b) are required');
+    return this.users.breedHorsesByTokenIds(a, b);
   }
 }

@@ -7,7 +7,7 @@ export const xpProgression: Record<number, number> = {
   6: 989,
   7: 1_671,
   8: 1_871,
-  9:  1_014,
+  9:  2_114,
   10: 2_571,
   11: 3_257,
   12: 4_286,

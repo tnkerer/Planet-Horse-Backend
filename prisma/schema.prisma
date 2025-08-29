@@ -90,18 +90,23 @@ model Horse {
   equipments    Item[]
   lastRace      DateTime?
   lastEnergy    DateTime?
+  lastBreeding  DateTime?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime?      @updatedAt
   raceHistory   RaceHistory[]
   presaleIntent PresaleIntent? @relation(fields: [intentId], references: [id])
   intentId      String?
   gen           Int            @default(0)
+  currentBreeds Int            @default(0)
+  ownedSince    DateTime?
+  maxBreeds     Int?
 
     // NEW: how many trait slots this horse may fill now (2..5)
   traitSlotsUnlocked Int @default(2)
 
   // NEW: relation to the per-horse trait rows
   traits       HorseTrait[]
+  parents            Int[]
 
   @@index([ownerId])  
 }
@@ -227,6 +232,7 @@ enum Status {
   SLEEP
   IDLE
   BRUISED
+  BREEDING
 }
 
 enum TransactionType {

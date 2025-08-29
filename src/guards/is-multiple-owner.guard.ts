@@ -10,8 +10,11 @@ import { Reflector } from '@nestjs/core';
 import { ethers } from 'ethers';
 import { PrismaService } from '../prisma/prisma.service';
 
-const CONTRACT_ADDRESS = process.env.NFT_CONTRACT_ADDRESS!;
+const CONTRACT_ADDRESS_LEGACY = process.env.NFT_CONTRACT_ADDRESS!;        // up to 2202
+const CONTRACT_ADDRESS_OFH = process.env.NFT_CONTRACT_ADDRESS_OFH!;    // 2203+
+
 const RPC_URL = process.env.RONIN_RPC_URL!;
+const LEGACY_MAX_TOKEN_ID = 2202 as const;
 
 const ABI = [
   'function ownerOf(uint256 tokenId) view returns (address)',
@@ -20,14 +23,23 @@ const ABI = [
 @Injectable()
 export class IsMultipleOwnerGuard implements CanActivate {
   private provider: ethers.JsonRpcProvider;
-  private contract: ethers.Contract;
+  private contractLegacy: ethers.Contract;
+  private contractOFH: ethers.Contract;
 
   constructor(
     private reflector: Reflector,
     private readonly prisma: PrismaService,
   ) {
     this.provider = new ethers.JsonRpcProvider(RPC_URL);
-    this.contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, this.provider);
+    this.contractLegacy = new ethers.Contract(CONTRACT_ADDRESS_LEGACY, ABI, this.provider);
+    this.contractOFH = new ethers.Contract(CONTRACT_ADDRESS_OFH, ABI, this.provider);
+  }
+
+  // helper: pick contract by tokenId
+  private getContractFor(tokenId: string) {
+    const n = Number(tokenId);
+    if (!Number.isFinite(n)) throw new ForbiddenException('Invalid tokenId');
+    return n <= LEGACY_MAX_TOKEN_ID ? this.contractLegacy : this.contractOFH;
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -52,10 +64,10 @@ export class IsMultipleOwnerGuard implements CanActivate {
 
     // 2) Upsert the user in DB
     const user = await this.prisma.user.upsert({
-      where:   { wallet },
-      update:  {},
-      create:  { wallet },
-      select:  { id: true },
+      where: { wallet },
+      update: {},
+      create: { wallet },
+      select: { id: true },
     });
 
     // 3) Load existing horse records and fix any mismatches
@@ -73,12 +85,12 @@ export class IsMultipleOwnerGuard implements CanActivate {
         // reassign ownership
         await tx.horse.updateMany({
           where: { id: { in: mismatchedIds } },
-          data:  { ownerId: user.id },
+          data: { ownerId: user.id, ownedSince: new Date() },
         });
         // unequip items
         await tx.item.updateMany({
           where: { horseId: { in: mismatchedIds } },
-          data:  { horseId: null },
+          data: { horseId: null },
         });
       });
     }
@@ -88,8 +100,9 @@ export class IsMultipleOwnerGuard implements CanActivate {
 
   private async getOwnerOf(tokenId: string): Promise<string> {
     try {
-      return await this.contract.ownerOf(tokenId);
-    } catch (err) {
+      const c = this.getContractFor(tokenId);
+      return await c.ownerOf(tokenId);
+    } catch {
       throw new ForbiddenException(`Failed to verify on-chain owner for token ${tokenId}`);
     }
   }

@@ -12,6 +12,7 @@ import Moralis from 'moralis';
 
 const MORALIS_API_KEY = process.env.MORALIS_API_KEY; // Use .env file for safety
 const NFT_CONTRACT_ADDRESS = process.env.NFT_CONTRACT_ADDRESS || '0x66eeb20a1957c4b3743ecad19d0c2dbcf56b683f'; // Your contract address
+const NFT_CONTRACT_ADDRESS_OFH = process.env.NFT_CONTRACT_ADDRESS_OFH || '0x1296ffefc43ff7eb4b7617c02ef80253db905215'; // Your contract address
 const CHAIN_ID = 2020;
 
 export interface RewardsSuccess {
@@ -29,7 +30,7 @@ const softmax = (scores: number[]): number[] => {
 };
 
 const allowedMaxPosition = (level: number): number => {
-  if (level < 5 ) return 10;
+  if (level < 5) return 10;
   if (level < 10) return 9;
   if (level < 15) return 8;
   if (level < 20) return 7;
@@ -113,80 +114,60 @@ export class HorseService {
     await this.initMoralis();
 
     return await this.prisma.$transaction(async (tx) => {
-      // 1. Lookup user in DB (fail if user doesn't exist)
+      // 1) User
       const user = await tx.user.findUnique({
         where: { wallet: walletAddress.toLowerCase() },
         select: { id: true },
       });
-
-      if (!user) {
-        throw new NotFoundException('User not found');
-      }
-
+      if (!user) throw new NotFoundException('User not found');
       const userId = user.id;
 
-      // 2. Fetch token IDs from blockchain (NFTs)
+      // 2) NFTs on-chain
       const response = await Moralis.EvmApi.nft.getWalletNFTs({
         chain: CHAIN_ID,
         format: 'decimal',
         normalizeMetadata: false,
-        tokenAddresses: [NFT_CONTRACT_ADDRESS],
+        tokenAddresses: [NFT_CONTRACT_ADDRESS, NFT_CONTRACT_ADDRESS_OFH],
         mediaItems: false,
         address: walletAddress,
       });
-
       const nftList = response.raw.result;
-
-      if (!nftList || nftList.length === 0) {
-        return [];
-      }
+      if (!nftList || nftList.length === 0) return [];
 
       const tokenIds = nftList.map((nft: any) => (BigInt(nft.token_id)).toString());
 
-      // 3. Fetch current horses matching tokenIds
+      // 3) Horses in DB for those tokenIds
       const horses = await tx.horse.findMany({
-        where: {
-          tokenId: { in: tokenIds },
-        },
-        select: {
-          id: true,
-          tokenId: true,
-          ownerId: true,
-        },
+        where: { tokenId: { in: tokenIds } },
+        select: { id: true, tokenId: true, ownerId: true },
       });
 
       const mismatchedHorseIds = horses
         .filter(h => h.ownerId !== userId)
         .map(h => h.id);
 
-      // 4. If any mismatched horses, fix ownership in one SQL update
-      // plus unequip all items that horse had equipped
+      // 4) Fix ownership + ownedSince in ONE statement; only when owner differs
       if (mismatchedHorseIds.length > 0) {
-        await tx.$executeRawUnsafe(
-          `
+        // Update ownerId and ownedSince=NOW() only if owner actually changes
+        await tx.$executeRaw`
         UPDATE "Horse"
-        SET "ownerId" = $1
-        WHERE "id" = ANY($2)
-        `,
-          userId,
-          mismatchedHorseIds
-        );
+        SET "ownerId" = ${userId},
+            "ownedSince" = NOW()
+        WHERE "id" = ANY(${mismatchedHorseIds})
+          AND "ownerId" <> ${userId}
+      `;
 
-        await tx.$executeRawUnsafe(
-          `
+        // Unequip items that were on those horses
+        await tx.$executeRaw`
         UPDATE "Item"
         SET "horseId" = NULL
-        WHERE "horseId" = ANY($1)
-        `,
-          mismatchedHorseIds
-        );
+        WHERE "horseId" = ANY(${mismatchedHorseIds})
+      `;
       }
 
-      // 5. Fetch full horse data for response (with correct ownership)
+      // 5) Return horses (with up-to-date ownership and ownedSince)
       const horseDetails = await tx.horse.findMany({
-        where: {
-          tokenId: { in: tokenIds },
-        },
+        where: { tokenId: { in: tokenIds } },
         include: { equipments: true },
         orderBy: { createdAt: 'desc' },
       });
@@ -197,8 +178,6 @@ export class HorseService {
       }));
     });
   }
-
-
 
   /**
   * Performs a single‐level upgrade on `tokenId`:
@@ -402,7 +381,10 @@ export class HorseService {
             currentEnergy: updatedCurrentEnergy,
             exp: remainingXp,
             upgradable: newUpgradable,
-            status: ((updatedCurrentEnergy > (baseEnergy - 1 - totalModifier.energySaved)) && status == 'SLEEP') ? 'IDLE' : status,
+            status: (status === 'SLEEP' &&
+              updatedCurrentEnergy > (baseEnergy - 1 - totalModifier.energySaved))
+              ? 'IDLE'
+              : status,
           },
         }),
       ]);
@@ -1377,7 +1359,7 @@ export class HorseService {
       const energySpent = Math.max(1, baseEnergy - totalModifier.energySaved);
 
       let newStatus;
-      if (horse.status === 'IDLE') {
+      if (horse.status === 'IDLE' || horse.status === 'SLEEP') {
         newStatus = horse.currentEnergy >= energySpent ? 'IDLE' : 'SLEEP';
       } else {
         newStatus = horse.status
@@ -1491,7 +1473,7 @@ export class HorseService {
       const energySpent = Math.max(1, baseEnergy - totalModifier.energySaved);
 
       let newStatus;
-      if (horse.status === 'IDLE') {
+      if (horse.status === 'IDLE' || horse.status === 'SLEEP') {
         newStatus = horse.currentEnergy >= energySpent ? 'IDLE' : 'SLEEP';
       } else {
         newStatus = horse.status

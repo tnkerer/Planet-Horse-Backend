@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { chests } from 'src/data/items';
 import { TransactionStatus, TransactionType, Request } from '@prisma/client';
@@ -9,13 +9,513 @@ import { HorseService } from 'src/horse/horse.service';
 import { itemUpgradeCost, successRate, upgradePoints } from 'src/data/item_progression';
 import { randomBytes } from 'crypto';
 import { itemCraftReq } from '../data/item_crafting';
+import { rarityBase } from 'src/data/rarity_base';
 
-const WRON_SYMBOL = 'WRON';
-const PHORSE_SYMBOL = 'PHORSE';
+type Rarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY' | 'MYTHIC';
+type OracleResp = {
+    symbol: 'PHORSE';
+    usdPriceFormatted: string;
+    updatedAt: string;
+    source: 'moralis';
+    cached: boolean;
+};
 
 @Injectable()
 export class UserService {
     constructor(private readonly prisma: PrismaService, private readonly horseService: HorseService) { }
+
+
+    // --- Moralis config (simple & explicit) ---
+    private readonly PHORSE_ADDR =
+        '0x6ad39689cac97a3e647fabd31534555bc7edd5c6';
+    private readonly MORALIS_URL = `https://deep-index.moralis.io/api/v2.2/erc20/${this.PHORSE_ADDR}/price?chain=ronin`;
+
+    // --- ultra-simple in-memory cache (avoid hammering & 500s) ---
+    private oracleCache: OracleResp | null = null;
+    private oracleCacheAt = 0;
+    private readonly ORACLE_TTL_MS = 30_000; // 30s
+
+    async breedHorsesByTokenIds(tokenIdA: string, tokenIdB: string) {
+        if (!tokenIdA || !tokenIdB) {
+            throw new BadRequestException('Both token IDs are required');
+        }
+        if (tokenIdA === tokenIdB) {
+            throw new BadRequestException('Use two distinct parents');
+        }
+
+        const isNumeric = (s: string) => /^\d+$/.test(s);
+        if (!isNumeric(tokenIdA) || !isNumeric(tokenIdB)) {
+            throw new BadRequestException('Breeding requires numeric tokenIds');
+        }
+        const numA = Number(tokenIdA);
+        const numB = Number(tokenIdB);
+
+        // Fetch both parents in one roundtrip
+        const parents = await this.prisma.horse.findMany({
+            where: { tokenId: { in: [tokenIdA, tokenIdB] } },
+            select: {
+                id: true, tokenId: true, ownerId: true, sex: true, status: true, rarity: true,
+                level: true, currentBreeds: true, ownedSince: true, gen: true,
+                basePower: true, baseSprint: true, baseSpeed: true,
+                parents: true,
+                maxBreeds: true
+            },
+        });
+
+        if (parents.length !== 2) {
+            const found = new Set(parents.map(p => p.tokenId));
+            const missing = [tokenIdA, tokenIdB].filter(t => !found.has(t));
+            throw new NotFoundException(`Parent(s) not found: ${missing.join(', ')}`);
+        }
+
+        const [p1, p2] = parents;
+
+        // Same owner
+        if (p1.ownerId !== p2.ownerId) {
+            throw new BadRequestException('Both parents must share the same owner');
+        }
+
+        // Sex check (one MALE, one FEMALE)
+        const hasMale = p1.sex === 'MALE' || p2.sex === 'MALE';
+        const hasFemale = p1.sex === 'FEMALE' || p2.sex === 'FEMALE';
+        if (!hasMale || !hasFemale) {
+            throw new BadRequestException('Parents must be one MALE and one FEMALE');
+        }
+        const male = p1.sex === 'MALE' ? p1 : p2;
+        const female = p1.sex === 'FEMALE' ? p1 : p2;
+
+        // Status = IDLE
+        if (p1.status !== 'IDLE' || p2.status !== 'IDLE') {
+            throw new BadRequestException('Both parents must be IDLE');
+        }
+
+        // Owned ≥ 72h
+        const now = Date.now();
+        const minOwnedMs = 72 * 60 * 60 * 1000;
+        const ownedA = p1.ownedSince ? now - p1.ownedSince.getTime() : 0;
+        const ownedB = p2.ownedSince ? now - p2.ownedSince.getTime() : 0;
+        if (ownedA < minOwnedMs || ownedB < minOwnedMs) {
+            throw new BadRequestException('You must own both parents for at least 72 hours');
+        }
+
+        // Level rule: level == currentBreeds + 1
+        if (p1.level < (p1.currentBreeds ?? 0) + 1 || p2.level < (p2.currentBreeds ?? 0) + 1) {
+            throw new BadRequestException('Horse level is too low for a new breed');
+        }
+
+        // Breed limits by rarity (per parent)
+        const toTier = (r: string) => {
+            const k = r.toLowerCase();
+            if (k === 'common') return 'Common';
+            if (k === 'uncommon') return 'Uncommon';
+            if (k === 'rare') return 'Rare';
+            if (k === 'epic') return 'Epic';
+            if (k === 'legendary') return 'Legendary';
+            if (k === 'mythic') return 'Mythic';
+            throw new BadRequestException(`Unsupported rarity "${r}"`);
+        };
+
+        if ((p1.currentBreeds ?? 0) >= (p1.maxBreeds ?? 0)) {
+            throw new BadRequestException(`Parent ${p1.tokenId} reached its breed limit`);
+        }
+        if ((p2.currentBreeds ?? 0) >= (p2.maxBreeds ?? 0)) {
+            throw new BadRequestException(`Parent ${p2.tokenId} reached its breed limit`);
+        }
+
+        // ---------- INCEST CHECKS ----------
+        // Parent ↔ child (A is parent of B OR B is parent of A)
+        const p1Parents = (parents[0].parents ?? []);
+        const p2Parents = (parents[1].parents ?? []);
+        if (p1Parents.includes(numB) || p2Parents.includes(numA)) {
+            throw new BadRequestException('Breeding between parent and child is not allowed');
+        }
+
+        // Siblings (share at least one parent)
+        const hasCommonParent =
+            p1Parents.length > 0 && p2Parents.length > 0 &&
+            p1Parents.some(pid => p2Parents.includes(pid));
+        if (hasCommonParent) {
+            throw new BadRequestException('Breeding between siblings is not allowed');
+        }
+
+        // --- COSTS (REF: your updated calculateBreedCosts) ---
+        // IMPORTANT: pass TOKEN IDs here (not internal DB ids)
+        const { phorseCost, ronCost } = await this.calculateBreedCosts(tokenIdA, tokenIdB);
+
+        // --- Determine child rarity from lower tier chances, name, stats, etc. ---
+        // Lower tier (for breeding chances)
+        const tierOrder = { Common: 0, Uncommon: 1, Rare: 2, Epic: 3, Legendary: 4, Mythic: 5 };
+        const t1 = toTier(p1.rarity);
+        const t2 = toTier(p2.rarity);
+        const lowerTier = tierOrder[t1] <= tierOrder[t2] ? t1 : t2;
+
+        // Pull chances from rarityBase
+        const chances = (rarityBase as any)[lowerTier]?.['Breeding Chances'] as number[] | undefined;
+        if (!Array.isArray(chances) || chances.length !== 6) {
+            throw new BadRequestException('Invalid rarity chances config');
+        }
+        const pickWeightedIndex = (weights: number[]) => {
+            const sum = weights.reduce((a, b) => a + b, 0);
+            let r = Math.random() * sum;
+            for (let i = 0; i < weights.length; i++) {
+                if ((r -= weights[i]) <= 0) return i;
+            }
+            return weights.length - 1;
+        };
+        const rarityMap = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'] as const;
+        const childTier = rarityMap[pickWeightedIndex(chances)];
+
+        // Name pool per rarity
+        const NAME_POOL = {
+            Common: ['Blue Roan', 'Brown', 'Chestnut', 'Dark Bay', 'Gray', 'Light Bay', 'Liver Chestnut', 'Palamino', 'Strawberry Roan', 'White'],
+            Uncommon: ['Aquamarine', 'Blue', 'Cyan', 'Dark Green', 'Green', 'Orange', 'Pink', 'Purple', 'Red', 'Yellow'],
+            Rare: ['Daisy', 'Love', 'Red Eyed Black', 'Red Eyed Blue', 'Red Eyed Crimson', 'Red Eyed Green', 'Red Eyed Purple'],
+            Epic: ['Black Gypsy', 'Nightmare', 'Rainbow', 'White Gypsy', 'Wooden Horse'],
+            Legendary: ['Bones', 'Ghost', 'Hologram', 'Hypothetical'],
+            Mythic: ['Deathcharger', 'Glitch', 'Wildfire'],
+        } as const;
+        const childName = NAME_POOL[childTier][Math.floor(Math.random() * NAME_POOL[childTier].length)];
+
+        // Stats mixing (highest stat from each parent + one from tier range)
+        const maleStats = [
+            { key: 'basePower' as const, val: male.basePower },
+            { key: 'baseSprint' as const, val: male.baseSprint },
+            { key: 'baseSpeed' as const, val: male.baseSpeed },
+        ].sort((a, b) => b.val - a.val);
+        const malePick = maleStats[0].key;
+
+        const femaleStats = [
+            { key: 'basePower' as const, val: female.basePower },
+            { key: 'baseSprint' as const, val: female.baseSprint },
+            { key: 'baseSpeed' as const, val: female.baseSpeed },
+        ].filter(s => s.key !== malePick).sort((a, b) => b.val - a.val);
+        const femalePick = femaleStats[0].key;
+
+        const startRange = (rarityBase as any)[childTier]['Starting Stats'] as [number, number];
+        const tierStat = Math.floor(Math.random() * (startRange[1] - startRange[0] + 1)) + startRange[0];
+
+        const slots: Array<'basePower' | 'baseSprint' | 'baseSpeed'> = ['basePower', 'baseSprint', 'baseSpeed'];
+        const remaining = slots.find(k => k !== malePick && k !== femalePick)!;
+
+        const base: Record<'basePower' | 'baseSprint' | 'baseSpeed', number> = {
+            basePower: 0, baseSprint: 0, baseSpeed: 0
+        };
+        base[malePick] = (male as any)[malePick];
+        base[femalePick] = (female as any)[femalePick];
+        base[remaining] = tierStat;
+
+        const childSex = Math.random() < 0.5 ? 'MALE' : 'FEMALE';
+        const childGen = Math.max(p1.gen ?? 0, p2.gen ?? 0) + 1;
+        const nowIso = new Date();
+
+        // Next numeric tokenId = MAX(tokenId numeric) + 1 (use one raw SQL)
+        const [{ maxToken }] = await this.prisma.$queryRaw<{ maxToken: bigint | null }[]>`
+    SELECT MAX(CASE WHEN "tokenId" ~ '^[0-9]+$' THEN ("tokenId")::bigint ELSE NULL END) AS "maxToken"
+    FROM "Horse"
+  `;
+        const nextTokenId = ((maxToken ?? BigInt(0)) + BigInt(1)).toString();
+
+        // --- Atomic transaction: reserve balances, recheck & bump parents, create child, log ---
+        return await this.prisma.$transaction(async (tx) => {
+            // Reserve PHORSE + RON (RON maps to your "wron" balance field)
+            const dec = await tx.user.updateMany({
+                where: { id: p1.ownerId, phorse: { gte: phorseCost }, wron: { gte: ronCost } },
+                data: {
+                    phorse: { decrement: phorseCost },
+                    wron: { decrement: ronCost },
+                    totalPhorseSpent: { increment: phorseCost },
+                    burnScore: { increment: phorseCost },
+                },
+            });
+            if (dec.count === 0) {
+                throw new BadRequestException('Insufficient balance to breed');
+            }
+
+            // Optimistic rechecks + increment breeds
+            const recheckA = await tx.horse.updateMany({
+                where: {
+                    id: p1.id,
+                    ownerId: p1.ownerId,
+                    status: 'IDLE',
+                    level: p1.level,
+                    currentBreeds: p1.currentBreeds,
+                    ownedSince: { lte: new Date(now - minOwnedMs) },
+                },
+                data: { currentBreeds: { increment: 1 }, status: 'BREEDING', lastBreeding: new Date() },
+            });
+            if (recheckA.count === 0) throw new BadRequestException(`Parent ${p1.tokenId} no longer eligible`);
+
+            const recheckB = await tx.horse.updateMany({
+                where: {
+                    id: p2.id,
+                    ownerId: p2.ownerId,
+                    status: 'IDLE',
+                    level: p2.level,
+                    currentBreeds: p2.currentBreeds,
+                    ownedSince: { lte: new Date(now - minOwnedMs) },
+                },
+                data: { currentBreeds: { increment: 1 }, status: 'BREEDING', lastBreeding: new Date() },
+            });
+            if (recheckB.count === 0) throw new BadRequestException(`Parent ${p2.tokenId} no longer eligible`);
+
+            // Create child
+            const child = await tx.horse.create({
+                data: {
+                    tokenId: nextTokenId,
+                    ownerId: p1.ownerId,
+                    name: childName,
+                    nickname: null,
+                    sex: childSex,
+                    status: 'IDLE',
+                    rarity: childTier,
+                    exp: 0,
+                    upgradable: false,
+                    level: 1,
+                    basePower: base.basePower,
+                    currentPower: base.basePower,
+                    baseSprint: base.baseSprint,
+                    currentSprint: base.baseSprint,
+                    baseSpeed: base.baseSpeed,
+                    currentSpeed: base.baseSpeed,
+                    currentEnergy: 12,
+                    maxEnergy: 12,
+                    foodUsed: 0,
+                    lastRace: null,
+                    lastEnergy: null,
+                    gen: childGen,
+                    currentBreeds: 0,
+                    ownedSince: nowIso,
+                    traitSlotsUnlocked: Math.floor(Math.random() * 2) + 2, // 2..3
+                    parents: [numA, numB],
+                    maxBreeds: Math.floor(Math.random() * 4) // 0..3
+                },
+                select: {
+                    id: true, tokenId: true, name: true, rarity: true, sex: true,
+                    basePower: true, baseSprint: true, baseSpeed: true, gen: true,
+                },
+            });
+
+            // Log
+            await tx.transaction.create({
+                data: {
+                    ownerId: p1.ownerId,
+                    type: TransactionType.ITEM,
+                    status: TransactionStatus.COMPLETED,
+                    value: phorseCost,
+                    tokenSymbol: 'PHORSE',
+                    note: `Breed: ${p1.tokenId} × ${p2.tokenId} → ${child.tokenId} (${child.rarity}); PHORSE=${phorseCost}, RON=${ronCost}`,
+                },
+            });
+
+            return {
+                child,
+                costs: { phorseCost, ronCost },
+            };
+        }, { timeout: 10_000 });
+    }
+
+    /**
+    * Simple, Moralis-like call that only returns the field you need:
+    * usdPriceFormatted. No DB trips. 30s in-memory cache. Converts all
+    * upstream failures into 503 to avoid 500s.
+    */
+    async getPhorseUsdOracle(): Promise<OracleResp> {
+        // Serve fresh cache if available
+        const now = Date.now();
+        if (this.oracleCache && now - this.oracleCacheAt < this.ORACLE_TTL_MS) {
+            return { ...this.oracleCache, cached: true };
+        }
+
+        const apiKey = process.env.MORALIS_API_KEY;
+        if (!apiKey) {
+            // Don’t 500 if config is missing; return 503 with a safe message.
+            throw new ServiceUnavailableException('Oracle temporarily unavailable');
+        }
+
+        // Single external roundtrip, short timeout
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 4500);
+
+        try {
+            const res = await fetch(this.MORALIS_URL, {
+                headers: { 'X-API-Key': apiKey },
+                signal: controller.signal,
+            });
+
+            if (!res.ok) {
+                // Prefer serving a slightly stale value over 500s
+                if (this.oracleCache) {
+                    return { ...this.oracleCache, cached: true };
+                }
+                throw new ServiceUnavailableException('Oracle upstream unavailable');
+            }
+
+            const json = await res.json();
+            const usdPriceFormatted = json?.usdPriceFormatted;
+
+            if (typeof usdPriceFormatted !== 'string' || !usdPriceFormatted) {
+                // If Moralis shape changes, shield callers from 500s
+                if (this.oracleCache) {
+                    return { ...this.oracleCache, cached: true };
+                }
+                throw new ServiceUnavailableException('Oracle payload invalid');
+            }
+
+            const payload: OracleResp = {
+                symbol: 'PHORSE',
+                usdPriceFormatted,
+                updatedAt: new Date().toISOString(),
+                source: 'moralis',
+                cached: false,
+            };
+
+            // Update cache atomically
+            this.oracleCache = payload;
+            this.oracleCacheAt = now;
+
+            return payload;
+        } catch (err) {
+            // Timeout / network / abort — serve stale if we have it
+            if (this.oracleCache) {
+                return { ...this.oracleCache, cached: true };
+            }
+            throw new ServiceUnavailableException('Oracle not reachable');
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    private normalizeRarity(r: string): Rarity {
+        const key = (r || '').trim().toUpperCase();
+        switch (key) {
+            case 'COMMON': return 'COMMON';
+            case 'UNCOMMON': return 'UNCOMMON';
+            case 'RARE': return 'RARE';
+            case 'EPIC': return 'EPIC';
+            case 'LEGENDARY': return 'LEGENDARY';
+            case 'MYTHIC': return 'MYTHIC';
+            default:
+                throw new BadRequestException(`Unsupported rarity "${r}"`);
+        }
+    }
+
+    private readonly rarityOrder: Record<Rarity, number> = {
+        COMMON: 0, UNCOMMON: 1, RARE: 2, EPIC: 3, LEGENDARY: 4, MYTHIC: 5
+    };
+
+    // USD base by lowest rarity
+    private readonly breedBaseUsd: Record<Rarity, number> = {
+        COMMON: 10,
+        UNCOMMON: 12.5,
+        RARE: 15,
+        EPIC: 17.5,
+        LEGENDARY: 20,
+        MYTHIC: 22.5,
+    };
+
+    private readonly breedBaseRon: Record<number, number> = {
+        1: 1.8,
+        2: 3.6,
+        3: 5.4,
+        4: 7.2,
+        5: 9,
+        6: 10.8,
+        7: 12.6,
+        8: 14.4,
+        9: 16.2,
+        10: 18,
+        11: 19.8,
+        12: 21.6,
+        13: 23.4,
+        14: 25.2,
+        15: 27.0,
+        16: 28.8,
+        17: 30.6,
+        18: 32.4,
+        19: 34.2,
+        20: 36.0,
+        21: 37.8,
+        22: 39.6,
+        23: 41.4,
+        24: 43.2
+    }
+
+    /**
+     * Calculate breed costs (PHORSE + RON).
+     * Changes:
+     * 1) Use the parent's **maximum** currentBreeds instead of the sum.
+     * 2) Add a +$1 modifier to baseUsd for each current breed on that parent
+     *    (i.e., baseUsd += maxCurrentBreeds * 1).
+     *
+     * PHORSE formula:
+     *   rawPhorse = ((baseUsd + maxCurrentBreeds * 1) / usdPrice) + (maxCurrentBreeds * usdPrice)
+     *
+     * RON formula:
+     *   ronCost = breedBaseRon[maxCurrentBreeds + 1]
+     */
+    async calculateBreedCosts(horseIdA: string, horseIdB: string) {
+        if (!horseIdA || !horseIdB) {
+            throw new BadRequestException('Both horse IDs are required');
+        }
+        if (horseIdA === horseIdB) {
+            throw new BadRequestException('Use two distinct horses');
+        }
+
+        // Fetch both horses in a single roundtrip
+        const horses = await this.prisma.horse.findMany({
+            where: { tokenId: { in: [horseIdA, horseIdB] } },
+            select: { id: true, rarity: true, currentBreeds: true },
+        });
+
+        if (horses.length !== 2) {
+            const foundTokenIds = new Set(horses.map(h => h.id));
+            const missing = [horseIdA, horseIdB].filter(id => !foundTokenIds.has(id));
+            throw new NotFoundException(`Horse(s) not found: ${missing.join(', ')}`);
+        }
+
+        // Normalize rarities & compute the lowest rarity (for base USD)
+        const r1 = this.normalizeRarity(horses[0].rarity);
+        const r2 = this.normalizeRarity(horses[1].rarity);
+        const lowestRarity = this.rarityOrder[r1] <= this.rarityOrder[r2] ? r1 : r2;
+
+        // Use the parent's MAX currentBreeds (not the sum)
+        const breedsA = horses[0].currentBreeds ?? 0;
+        const breedsB = horses[1].currentBreeds ?? 0;
+        const maxCurrentBreeds = Math.max(breedsA, breedsB);
+
+        // Oracle price (cached)
+        const { usdPriceFormatted } = await this.getPhorseUsdOracle();
+        const usd = Number(usdPriceFormatted);
+        if (!Number.isFinite(usd) || usd <= 0) {
+            throw new ServiceUnavailableException('Oracle price invalid');
+        }
+
+        // Base USD from rarity, then add +$1 per current breed on the higher-breed parent
+        const baseUsdBare = this.breedBaseUsd[lowestRarity];
+        if (!Number.isFinite(baseUsdBare)) {
+            throw new ServiceUnavailableException(`Base USD not defined for rarity ${lowestRarity}`);
+        }
+        const baseUsdWithModifier = baseUsdBare + maxCurrentBreeds * 5; // $5 per consecutive breed
+
+        // PHORSE cost
+        const rawPhorse = baseUsdWithModifier / usd + maxCurrentBreeds * usd;
+        if (!Number.isFinite(rawPhorse) || rawPhorse <= 0) {
+            throw new ServiceUnavailableException('Calculated PHORSE cost invalid');
+        }
+        const phorseCost = Math.ceil(rawPhorse);
+
+        // RON cost indexed by (maxCurrentBreeds + 1)
+        const ronKey = maxCurrentBreeds + 1;
+        const ronCost = this.breedBaseRon[ronKey];
+        if (ronCost == null) {
+            throw new ServiceUnavailableException(`RON cost not defined for breed #${ronKey}`);
+        }
+
+        return {
+            phorseCost,
+            ronCost,
+        };
+    }
 
     /**
      * Finds a user by wallet address or creates one with phorse = 0.
@@ -749,7 +1249,7 @@ export class UserService {
                 where: {
                     type: TransactionType.WITHDRAW,
                     status: TransactionStatus.PENDING,
-                    tokenSymbol: WRON_SYMBOL,
+                    tokenSymbol: 'WRON',
                     owner: { wallet: ownerWallet },
                 },
             });
@@ -782,10 +1282,10 @@ export class UserService {
                     type: TransactionType.WITHDRAW,
                     status: TransactionStatus.PENDING,
                     value: amount,
-                    note: `Requested withdraw of ${amount} ${WRON_SYMBOL}`,
+                    note: `Requested withdraw of ${amount} WRON`,
                     txId: null,               // to be filled by CRON when it broadcasts on-chain
                     tokenAddress: null,       // decoupled here
-                    tokenSymbol: WRON_SYMBOL, // this is enough for CRON to resolve later
+                    tokenSymbol: 'WRON', // this is enough for CRON to resolve later
                 },
                 select: { id: true },
             });
@@ -797,7 +1297,7 @@ export class UserService {
                     request: Request.WITHDRAW,
                     value: amount,
                     transaction: { connect: { id: transaction.id } },
-                    tokenSymbol: WRON_SYMBOL,
+                    tokenSymbol: 'WRON',
                 },
             });
 
