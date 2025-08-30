@@ -392,13 +392,34 @@ export class UserController {
 
   // GET /breed?finalizedOnly=true
   @Get('breed')
-  async listBreeds(@Req() req, @Query('notFinalizedOnly') finalizedOnly?: string) {
+  async listBreeds(@Req() req, @Query('finalizedOnly') finalizedOnly?: string) {
     const wallet = (req.user.wallet as string).toLowerCase();
     const only = typeof finalizedOnly === 'string'
       ? ['1', 'true', 'yes'].includes(finalizedOnly.toLowerCase())
       : false;
 
-    return this.users.listBreedsByOwner(wallet, !only);
+    return this.users.listBreedsByOwner(wallet, only);
+  }
+
+  /**
+  * Lightweight preflight:
+  * GET /breed/finalize/check?a=&b=
+  * Returns { eligible, reasons[], etaHours?, tokenId? }
+  */
+  @Get('finalize/check')
+  async checkFinalize(@Req() req, @Query('a') a: string, @Query('b') b: string) {
+    const wallet = (req.user.wallet as string).toLowerCase();
+    return this.users.checkFinalizeBreedingByParents(wallet, a, b);
+  }
+
+  /**
+  * Finalize:
+  * POST /breed/finalize { a, b }
+  */
+  @Post('finalize-breed')
+  async finalize(@Req() req, @Body() dto: BreedDto) {
+    const wallet = (req.user.wallet as string).toLowerCase();
+    return this.users.finalizeBreedingByParents(wallet, dto.a, dto.b);
   }
 
 }

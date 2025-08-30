@@ -532,10 +532,215 @@ export class UserService {
         return this.prisma.breed.findMany({
             where: {
                 ownerId: user.id,
-                ...(finalizedOnly ? { finalized: true } : {}),
+                ...(finalizedOnly ? { finalized: false } : {}),
             },
             orderBy: [{ started: 'desc' } as any].filter(Boolean),
         });
+    }
+
+    /**
+    * Preflight: tell if a breed for (a,b) is eligible to finalize RIGHT NOW.
+    * - Does not mutate state.
+    * - No horse ownership checks (only Breed ownership).
+    */
+    async checkFinalizeBreedingByParents(
+        callerWallet: string,
+        parentA: string | number,
+        parentB: string | number,
+    ): Promise<{ eligible: boolean; reasons: string[]; etaHours?: number; tokenId?: number }> {
+        const wallet = (callerWallet || '').toLowerCase();
+        const reasons: string[] = [];
+
+        const toInt = (v: string | number, name: string): number => {
+            const s = String(v).trim();
+            if (!/^\d+$/.test(s)) {
+                reasons.push(`${name} must be a numeric tokenId`);
+                return NaN as unknown as number;
+            }
+            const n = Number(s);
+            if (!Number.isSafeInteger(n) || n < 0) {
+                reasons.push(`${name} is invalid`);
+                return NaN as unknown as number;
+            }
+            return n;
+        };
+
+        const aInt = toInt(parentA, 'Parent A');
+        const bInt = toInt(parentB, 'Parent B');
+        if (Number.isNaN(aInt) || Number.isNaN(bInt)) return { eligible: false, reasons };
+        if (aInt === bInt) {
+            reasons.push('Use two distinct parents');
+            return { eligible: false, reasons };
+        }
+
+        const user = await this.prisma.user.findUnique({
+            where: { wallet },
+            select: { id: true },
+        });
+        if (!user) {
+            reasons.push('User not found');
+            return { eligible: false, reasons };
+        }
+
+        // Latest Breed for this pair owned by caller
+        const breed = await this.prisma.breed.findFirst({
+            where: { ownerId: user.id, parents: { hasEvery: [aInt, bInt] } },
+            orderBy: [{ started: 'desc' }, { id: 'desc' }],
+            select: { id: true, started: true, finalized: true, tokenId: true },
+        });
+        if (!breed) {
+            reasons.push('No breeding found for this parent pair');
+            return { eligible: false, reasons };
+        }
+
+        if (!breed.started) reasons.push('Breeding has not started yet');
+        if (breed.finalized) reasons.push('This breeding is already finalized');
+        if (breed.tokenId == null) reasons.push('Breeding has no tokenId assigned yet');
+
+        const DAY_MS = 24 * 60 * 60 * 1000;
+        const readyAt = breed.started ? breed.started.getTime() + DAY_MS : 0;
+        if (breed.started && Date.now() < readyAt) {
+            const etaHours = Math.ceil((readyAt - Date.now()) / 36e5);
+            reasons.push(`Breeding not ready yet. Try again in ~${etaHours}h`);
+        }
+
+        // Parents must be BREEDING (no ownership checks)
+        const [aStr, bStr] = [String(aInt), String(bInt)];
+        const parents = await this.prisma.horse.findMany({
+            where: { tokenId: { in: [aStr, bStr] } },
+            select: { tokenId: true, status: true },
+        });
+        if (parents.length !== 2) {
+            const found = new Set(parents.map(p => p.tokenId));
+            const missing = [aStr, bStr].filter(x => !found.has(x));
+            reasons.push(`Parent horse(s) not found: ${missing.join(', ')}`);
+        } else {
+            const notBreeding = parents.filter(p => p.status !== 'BREEDING').map(p => p.tokenId);
+            if (notBreeding.length) {
+                reasons.push(`Parent(s) not in BREEDING state: ${notBreeding.join(', ')}`);
+            }
+        }
+
+        const eligible = reasons.length === 0;
+        const payload: { eligible: boolean; reasons: string[]; etaHours?: number; tokenId?: number } = {
+            eligible,
+            reasons,
+        };
+        if (breed.started && Date.now() < readyAt) {
+            payload.etaHours = Math.ceil((readyAt - Date.now()) / 36e5);
+        }
+        if (breed.tokenId != null) payload.tokenId = breed.tokenId;
+
+        return payload;
+    }
+
+    /**
+    * Finalize a breeding for the latest Breed matching (a,b).
+    * - No current horse ownership checks.
+    * - Requires both parents currently be BREEDING.
+    * - Atomic: finalize Breed, create HorseMintRequest(PENDING), flip parents → IDLE.
+    */
+    async finalizeBreedingByParents(
+        callerWallet: string,
+        parentA: string | number,
+        parentB: string | number,
+    ) {
+        const wallet = (callerWallet || '').toLowerCase();
+        if (!wallet) throw new BadRequestException('Missing authenticated wallet');
+
+        const toInt = (v: string | number, name: string): number => {
+            const s = String(v).trim();
+            if (!/^\d+$/.test(s)) throw new BadRequestException(`${name} must be a numeric tokenId`);
+            const n = Number(s);
+            if (!Number.isSafeInteger(n) || n < 0) throw new BadRequestException(`${name} is invalid`);
+            return n;
+        };
+
+        const aInt = toInt(parentA, 'Parent A');
+        const bInt = toInt(parentB, 'Parent B');
+        if (aInt === bInt) throw new BadRequestException('Use two distinct parents');
+
+        const user = await this.prisma.user.findUnique({
+            where: { wallet },
+            select: { id: true },
+        });
+        if (!user) throw new NotFoundException('User not found');
+
+        const breed = await this.prisma.breed.findFirst({
+            where: { ownerId: user.id, parents: { hasEvery: [aInt, bInt] } },
+            orderBy: [{ started: 'desc' }, { id: 'desc' }],
+            select: { id: true, started: true, finalized: true, tokenId: true },
+        });
+        if (!breed) throw new NotFoundException('No breeding found for this parent pair');
+        if (!breed.started) throw new BadRequestException('Breeding has not started yet');
+        if (breed.finalized) throw new BadRequestException('This breeding is already finalized');
+        if (breed.tokenId == null) throw new BadRequestException('Breeding has no tokenId assigned yet');
+
+        const DAY_MS = 24 * 60 * 60 * 1000;
+        const cutoff = new Date(Date.now() - DAY_MS);
+        if (breed.started > cutoff) {
+            const hrs = Math.ceil((breed.started.getTime() + DAY_MS - Date.now()) / 36e5);
+            throw new BadRequestException(`Breeding not ready yet. Try again in ~${hrs}h`);
+        }
+
+        // Parents must be BREEDING at finalize time
+        const [aStr, bStr] = [String(aInt), String(bInt)];
+        const parents = await this.prisma.horse.findMany({
+            where: { tokenId: { in: [aStr, bStr] } },
+            select: { tokenId: true, status: true },
+        });
+        if (parents.length !== 2) {
+            const found = new Set(parents.map(p => p.tokenId));
+            const missing = [aStr, bStr].filter(x => !found.has(x));
+            throw new NotFoundException(`Parent horse(s) not found: ${missing.join(', ')}`);
+        }
+        const notBreeding = parents.filter(p => p.status !== 'BREEDING').map(p => p.tokenId);
+        if (notBreeding.length) {
+            throw new BadRequestException(
+                `Cannot finalize: parent(s) not in BREEDING state: ${notBreeding.join(', ')}`
+            );
+        }
+
+        // Atomic: finalize + mint request + flip parents → IDLE
+        const mintRequest = await this.prisma.$transaction(async (tx) => {
+            // Re-check and finalize
+            const upd = await tx.breed.updateMany({
+                where: { id: breed.id, finalized: false, started: { lte: cutoff } },
+                data: { finalized: true },
+            });
+            if (upd.count === 0) {
+                throw new BadRequestException('Breeding not eligible to finalize (already finalized or not ready)');
+            }
+
+            // Create mint request for caller
+            const req = await tx.horseMintRequest.create({
+                data: {
+                    requesterId: user.id,
+                    tokenId: breed.tokenId!,
+                    txId: null,
+                    status: TransactionStatus.PENDING,
+                },
+                select: { id: true, tokenId: true, status: true, txId: true, createdAt: true },
+            });
+
+            // Flip parents to IDLE only if they are BREEDING now
+            const affected: number = await tx.$executeRaw`
+        UPDATE "Horse"
+           SET "status" = 'IDLE'::"Status"
+         WHERE "tokenId" IN (${aStr}, ${bStr})
+           AND "status" = 'BREEDING'::"Status"
+      `;
+            if (affected !== 2) {
+                throw new BadRequestException('Parents are no longer in BREEDING state; unable to finalize');
+            }
+
+            return req;
+        });
+
+        return {
+            message: 'Breeding finalized. Mint request created and parents returned to IDLE.',
+            mintRequest,
+        };
     }
 
     /**

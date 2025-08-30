@@ -23,6 +23,7 @@ model User {
   chests               Chest[]
   requests             BridgeRequest[]
   itemRequests         ItemBridgeRequest[]
+  mintRequests         HorseMintRequest[]
   createdAt            DateTime            @default(now())
   updatedAt            DateTime?           @updatedAt
   phorse               Float               @default(0)
@@ -190,6 +191,17 @@ model ItemBridgeRequest {
   requesterId String
   request     Request
   quantity    Int
+  tokenId     Int
+  txId        String?
+  status      TransactionStatus
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime?         @updatedAt
+}
+
+model HorseMintRequest {
+  id          String        @id @default(uuid())
+  owner       User          @relation(fields: [requesterId], references: [id])
+  requesterId String
   tokenId     Int
   txId        String?
   status      TransactionStatus

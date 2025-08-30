@@ -72,6 +72,7 @@ export class AppModule implements NestModule {
         { path: 'user/link-discord', method: RequestMethod.POST },
         { path: 'user/ref-code', method: RequestMethod.POST },
         { path: 'user/breed', method: RequestMethod.POST },
+        { path: 'user/finalize-breed', method: RequestMethod.POST },
         { path: 'user/set-referred-by', method: RequestMethod.POST},
         { path: 'horses/*', method: RequestMethod.PUT },
         { path: 'simulate', method: RequestMethod.POST },
