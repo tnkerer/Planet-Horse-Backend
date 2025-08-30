@@ -91,6 +91,7 @@ export class AppService {
       { trait_type: 'energy', value: horse.currentEnergy, display_type: 'number' },
       { trait_type: 'max energy', value: horse.maxEnergy, display_type: 'number' },
       { trait_type: 'breeding count', value: horse.currentBreeds, display_type: 'number' },
+      { trait_type: 'max breeding count', value: horse.maxBreeds ? horse.maxBreeds : 0, display_type: 'number' },
 
       { trait_type: 'gen', value: horse.gen, display_type: 'number' },
       { trait_type: 'trait slots unlocked', value: horse.traitSlotsUnlocked, display_type: 'number' },
