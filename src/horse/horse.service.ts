@@ -1431,13 +1431,13 @@ export class HorseService {
 
       // (4) Check unequip cooldown for non-breakable items (trophies)
       if (!equipment.breakable) {
-        const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+        const HOURS_MS = 24 * 60 * 60 * 1000;
         const now = Date.now();
         const lastUpdate = equipment.updatedAt?.getTime() ?? 0;
-        if (now - lastUpdate < SIX_HOURS_MS) {
-          const minsLeft = Math.ceil((SIX_HOURS_MS - (now - lastUpdate)) / 60000);
+        if (now - lastUpdate < HOURS_MS) {
+          const minsLeft = Math.ceil((HOURS_MS - (now - lastUpdate)) / 60000);
           throw new BadRequestException(
-            `You can only unequip this item 6 hours after its last change. ` +
+            `You can only unequip this item 24 hours after its last change. ` +
             `Please wait another ${minsLeft} minute(s).`,
           );
         }
