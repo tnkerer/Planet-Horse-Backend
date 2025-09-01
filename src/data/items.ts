@@ -153,7 +153,7 @@ export const items = {
     "Krambee The Goat": {
         "name": "Krambee The Goat",
         "src": "goat",
-        "description": "Increase drop rate of items ingame by 100%",
+        "description": "Increased drop rate of items by 2 times",
         "breakable": false,
         "consumable": false,
         "trophy": true,
@@ -673,6 +673,26 @@ export const items = {
         "uses": 1,
         "chainId": 13015,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeia7g55avo45pmsyxr6osjrhsv7lmrtxuozcpbu5fsw334fberlkdi'
+    },
+    "Maneki-Neko" : {
+        "name" : "Maneki-Neko",
+        "src" : "neko",
+        "description": "Increased drop rate of items by 1.8 times.",
+        "breakable": true,
+        "consumable": false,
+        "uses": 10,
+        "chainId" : 15000,
+        "chainSrc": 'https://ipfs.io/ipfs/bafybeichdccot4b2etjafxa46v5yvqmnas7ebk4wvzta2qonj2efkhszta'
+    },
+    "Clover" : {
+        "name" : "Clover",
+        "src" : "clover",
+        "description" : "Reduce by 10% the chance of crafting or upgrading items to fail.",
+        "breakable" : true,
+        "consumable" : false,
+        "uses" : 1,
+        "chainId" : 16000,
+        "chainSrc" : 'https://ipfs.io/ipfs/bafybeihjpdcjq5h7out7k7jp53w22c7qvoz3ak7fjfw2jrjiepjy2mqrbi'
     }
 }
 
@@ -1200,6 +1220,16 @@ export const itemModifiers = {
         extraPwr: 0,
         dropsBoost: 2
     },
+    "Maneki-Neko" : {
+        positionBoost: 1,
+        hurtRate: 1,
+        xpMultiplier: 1,
+        energySaved: 0,
+        extraSpd: 0,
+        extraSpt: 0,
+        extraPwr: 0,
+        dropsBoost: 1.8
+    },
     "BoostRexGQ Trophy": {
         positionBoost: 1,
         hurtRate: 1,
@@ -1215,43 +1245,61 @@ export const itemModifiers = {
 export const trophyDrops = {
     "Ronke Farmer Trophy": {
         "Rice Bowl": 10,
-        "Rice Sack": 0.05
+        "Scrap Metal" : 0.1,
+        "Scrap Leather" : 0.1,
+        "Maneki-Neko" : 0.2,
+        "Clover" : 0.05
     }
 }
 
 export const itemDrops = {
     5: { // If horse is level is 5 or higher
         "Hay": 3,  // Adds 5% chance of dropping this item
-        "Pumpers": 5, // Adds 5% chance of dropping this item
+        "Pumpers": 3, // Adds 5% chance of dropping this item
         "Big Hay Bale": 0.1, // Adds 0.1% chance of dropping this item
+        "Maneki-Neko" : 0.1
     },
     10: { // If horse is level is 10 or higher
         "Big Hay Bale": 0.5, // Adds 1% chance of dropping this item
+        "Maneki-Neko" : 0.5,
+        "Scrap Metal" : 0.1,
+        "Scrap Leather" : 0.1,
         "Baby Horse Trophy": 0.05, // Adds 0.05% chance of dropping this item
         "Champion Bridle +3": 0.1, // Adds 0.1% chance of dropping this item
         "Champion Saddle Pad +3": 0.1, // Adds 0.1% chance of dropping this item
-        "Champion Stirrups +3": 0.1 // Adds 0.1% chance of dropping this item
+        "Champion Stirrups +3": 0.1, // Adds 0.1% chance of dropping this item
+        "Clover" : 0.05
     },
     15: { // If horse is level is 15 or higher
+        "Scrap Metal" : 0.15,
+        "Scrap Leather" : 0.15,
         "Baby Horse Trophy": 0.5, // Adds 0.5% chance of dropping this item
         "Champion Bridle +6": 0.1, // Adds 0.1% chance of dropping this item
         "Champion Saddle Pad +6": 0.1, // Adds 0.1% chance of dropping this item
-        "Champion Stirrups +6": 0.1 // Adds 0.1% chance of dropping this item
+        "Champion Stirrups +6": 0.1, // Adds 0.1% chance of dropping this item
+        "Maneki-Neko": 0.5,
+        "Clover" : 0.1
+    },
+    20: {
+        "Champion Bridle +9": 0.1, // Adds 0.1% chance of dropping this item
+        "Champion Saddle Pad +9": 0.1, // Adds 0.1% chance of dropping this item
+        "Champion Stirrups +9": 0.1, // Adds 0.1% chance of dropping this item
+        "Clover" : 0.15
     }
 }
 
 export const chestDrops = {
     5: { // Level Threshold
-        1: 3, // Drop percetage of chest type 1 adds 5%
+        1: 1, // Drop percetage of chest type 1 adds 1%
         2: 0 // Drop percetage of chest type 2 adds 0%
     },
     10: { // Level Threshold
-        1: 5, // Drop percetage of chest type 1 adds 5%
-        2: 3 // Drop percetage of chest type 2 adds 3%
+        1: 1, // Drop percetage of chest type 1 adds 2%
+        2: 1 // Drop percetage of chest type 2 adds 1%
     },
     15: {
-        1: 5, // Drop percetage of chest type 1 adds 5%
-        2: 5 // Drop percetage of chest type 2 adds 5%
+        1: 1, // Drop percetage of chest type 1 adds 2%
+        2: 1 // Drop percetage of chest type 2 adds 1%
     }
 }
 

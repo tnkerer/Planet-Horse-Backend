@@ -76,8 +76,10 @@ export class AppService {
       { trait_type: 'horse type', value: horseType },
       { trait_type: 'rarity', value: rarityDisplay },
       { trait_type: 'gender', value: this.formatSex(horse.sex) },
-      { trait_type: 'parent 1', value: horse.parents[0] ? horse.parents[0] : 'none'},
-      { trait_type: 'parent 2', value: horse.parents[1] ? horse.parents[1] : 'none'},
+      { trait_type: 'breeding count', value: `${horse.currentBreeds}/${horse.maxBreeds ? horse.maxBreeds : 0}` },
+
+      { trait_type: 'parent 1', value: horse.parents[0] ? `${horse.parents[0]}` : 'none'},
+      { trait_type: 'parent 2', value: horse.parents[1] ? `${horse.parents[1]}` : 'none'},
 
       { trait_type: 'exp', value: horse.exp, display_type: 'number' },
       { trait_type: 'level', value: horse.level, display_type: 'number' },
@@ -92,8 +94,6 @@ export class AppService {
 
       { trait_type: 'energy', value: horse.currentEnergy, display_type: 'number' },
       { trait_type: 'max energy', value: horse.maxEnergy, display_type: 'number' },
-      { trait_type: 'breeding count', value: horse.currentBreeds, display_type: 'number' },
-      { trait_type: 'max breeding count', value: horse.maxBreeds ? horse.maxBreeds : 0, display_type: 'number' },
 
       { trait_type: 'gen', value: horse.gen, display_type: 'number' },
       { trait_type: 'trait slots unlocked', value: horse.traitSlotsUnlocked, display_type: 'number' },
