@@ -134,6 +134,7 @@ export class HorseService {
       const nftList = response.raw.result;
       if (!nftList || nftList.length === 0) return [];
 
+
       const tokenIds = nftList.map((nft: any) => (BigInt(nft.token_id)).toString());
 
       // 3) Horses in DB for those tokenIds

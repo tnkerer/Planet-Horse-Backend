@@ -893,7 +893,7 @@ export class UserService {
         // Fetch both horses in a single roundtrip
         const horses = await this.prisma.horse.findMany({
             where: { tokenId: { in: [horseIdA, horseIdB] } },
-            select: { id: true, rarity: true, currentBreeds: true },
+            select: { id: true, rarity: true, currentBreeds: true, gen: true },
         });
 
         if (horses.length !== 2) {
@@ -914,7 +914,9 @@ export class UserService {
 
         // Oracle price (cached)
         const { usdPriceFormatted } = await this.getPhorseUsdOracle();
+
         const usd = Number(usdPriceFormatted);
+
         if (!Number.isFinite(usd) || usd <= 0) {
             throw new ServiceUnavailableException('Oracle price invalid');
         }
@@ -927,7 +929,12 @@ export class UserService {
         const baseUsdWithModifier = baseUsdBare + maxCurrentBreeds * 5; // $5 per consecutive breed
 
         // PHORSE cost
-        const rawPhorse = baseUsdWithModifier / usd + maxCurrentBreeds * usd;
+        let rawPhorse = baseUsdWithModifier / usd + maxCurrentBreeds * usd;
+
+        if (horses[0].gen > 0 || horses[1].gen > 0) {
+           rawPhorse = rawPhorse * 1.80;
+        }
+
         if (!Number.isFinite(rawPhorse) || rawPhorse <= 0) {
             throw new ServiceUnavailableException('Calculated PHORSE cost invalid');
         }
