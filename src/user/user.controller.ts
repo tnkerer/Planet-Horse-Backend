@@ -10,7 +10,12 @@ import { ActiveBreedsLimitGuard } from 'src/guards/active-breeds-limit-guard';
 const WRON_MIN = 0.1;   // tune these as you prefer
 const WRON_MAX = 1000;
 
-class BreedDto { a!: string; b!: string; }
+type BreedDto = {
+  a: string;
+  b: string;
+  geneA?: number | null;
+  geneB?: number | null;
+};
 
 @Controller('user')
 @UseGuards(JwtAuthGuard, ThrottlerGuard)
@@ -371,16 +376,18 @@ export class UserController {
   }
 
   /**
-  * POST /user/breed
-  * Body: { "a": "<parentTokenIdA>", "b": "<parentTokenIdB>" }
-  */
+   * POST /user/breed
+   * Body: { a: "<parentTokenIdA>", b: "<parentTokenIdB>", geneA?: 17000|17001|17002, geneB?: 17000|17001|17002 }
+   */
   @Post('breed')
   @UseGuards(IsPairOwnerGuard, ActiveBreedsLimitGuard)
   @Throttle({ default: { limit: 25, ttl: 60_000 } })
   async breed(@Body() body: BreedDto) {
-    const { a, b } = body || {};
+    const { a, b, geneA = null, geneB = null } = body || {};
     if (!a || !b) throw new BadRequestException('Both token IDs (a, b) are required');
-    return this.users.breedHorsesByTokenIds(a, b);
+
+    // pass straight through; service will validate
+    return this.users.breedHorsesByTokenIds(a, b, geneA, geneB);
   }
 
   // GET /breed/preflight?a=123&b=456

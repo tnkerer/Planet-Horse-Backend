@@ -674,26 +674,77 @@ export const items = {
         "chainId": 13015,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeia7g55avo45pmsyxr6osjrhsv7lmrtxuozcpbu5fsw334fberlkdi'
     },
-    "Maneki-Neko" : {
-        "name" : "Maneki-Neko",
-        "src" : "neko",
+    "Maneki-Neko": {
+        "name": "Maneki-Neko",
+        "src": "neko",
         "description": "Increased drop rate of items by 1.8 times.",
         "breakable": true,
         "consumable": false,
         "uses": 10,
-        "chainId" : 15000,
+        "chainId": 15000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeichdccot4b2etjafxa46v5yvqmnas7ebk4wvzta2qonj2efkhszta'
     },
-    "Clover" : {
-        "name" : "Clover",
-        "src" : "clover",
-        "description" : "Reduce by 10% the chance of crafting or upgrading items to fail.",
-        "breakable" : true,
-        "consumable" : false,
-        "uses" : 1,
-        "chainId" : 16000,
-        "chainSrc" : 'https://ipfs.io/ipfs/bafybeihjpdcjq5h7out7k7jp53w22c7qvoz3ak7fjfw2jrjiepjy2mqrbi'
-    }
+    "Clover": {
+        "name": "Clover",
+        "src": "clover",
+        "description": "Reduce by 10% the chance of crafting or upgrading items to fail.",
+        "breakable": true,
+        "consumable": false,
+        "uses": 1,
+        "chainId": 16000,
+        "chainSrc": 'https://ipfs.io/ipfs/bafybeihjpdcjq5h7out7k7jp53w22c7qvoz3ak7fjfw2jrjiepjy2mqrbi'
+    },
+    "Power Genes": {
+        "name": "Power Genes",
+        "src": "power_gene",
+        "description": "A breeding material, it boost the base POWER of a new Offspring by 6 points!",
+        "breakable": true,
+        "consumable": false,
+        "uses": 1,
+        "chainId": 17000,
+        "chainSrc": 'https://ipfs.io/ipfs/bafybeigkd3wc5xhkl4yaikak5olr5yoevfqowru24i57vd5cxwxrvykpge'
+    },
+    "Speed Genes": {
+        "name": "Speed Genes",
+        "src": "speed_gene",
+        "description": "A breeding material, it boost the base SPEED of a new Offspring by 6 points!",
+        "breakable": true,
+        "consumable": false,
+        "uses": 1,
+        "chainId": 17001,
+        "chainSrc": 'https://ipfs.io/ipfs/bafybeibv6miu7crkdn4tf6aodnn53icitcmsr7hf3quavgakks7io47kuy'
+    },
+    "Sprint Genes": {
+        "name": "Sprint Genes",
+        "src": "sprint_gene",
+        "description": "A breeding material, it boost the base SPRINT of a new Offspring by 6 points!",
+        "breakable": true,
+        "consumable": false,
+        "uses": 1,
+        "chainId": 17002,
+        "chainSrc": 'https://ipfs.io/ipfs/bafybeidsmjqtpwhwsqpjvp77jj772duoaauqffyajvbd4yr4f5p2xy4fmm'
+    },
+    "Baxie Trophy": {
+        "name": "Baxie Trophy",
+        "src": "baxie",
+        "description": "Earn boosted Medals when this horse makes the podium, with a small chance to drop Medal Bags!",
+        "consumable": false,
+        "breakable": false,
+        "uses": 1,
+        "chainId": 18000,
+        "trophy": true,
+        "chainSrc": 'https://ipfs.io/ipfs/bafybeiecbvnbcn7awzuegyi3zjz7zhijgpctbv6m4j4yg6el5j4epnvjie'
+    },
+    "Level Up Ticket": {
+        "name": "Level Up Ticket",
+        "src": "ticket",
+        "description": "A free level up ticket! Limited by 1 use per horse.",
+        "consumable": true,
+        "breakable": true,
+        "uses": 1,
+        "chainId": 19000,
+        "chainSrc": 'https://ipfs.io/ipfs/bafybeid75oc3aoh74f6bznorlakyzoiwt77oyyoqungwaczp626js4jgfa'
+    },
 }
 
 export const itemModifiers = {
@@ -1220,7 +1271,7 @@ export const itemModifiers = {
         extraPwr: 0,
         dropsBoost: 2
     },
-    "Maneki-Neko" : {
+    "Maneki-Neko": {
         positionBoost: 1,
         hurtRate: 1,
         xpMultiplier: 1,
@@ -1245,10 +1296,13 @@ export const itemModifiers = {
 export const trophyDrops = {
     "Ronke Farmer Trophy": {
         "Rice Bowl": 10,
-        "Scrap Metal" : 0.1,
-        "Scrap Leather" : 0.1,
-        "Maneki-Neko" : 0.2,
-        "Clover" : 0.05
+        "Scrap Metal": 0.1,
+        "Scrap Leather": 0.1,
+        "Maneki-Neko": 0.2,
+        "Clover": 0.05
+    },
+    "Baxie Trophy": {
+        "Medal Bag": 0.005
     }
 }
 
@@ -1257,34 +1311,34 @@ export const itemDrops = {
         "Hay": 3,  // Adds 5% chance of dropping this item
         "Pumpers": 3, // Adds 5% chance of dropping this item
         "Big Hay Bale": 0.1, // Adds 0.1% chance of dropping this item
-        "Maneki-Neko" : 0.1
+        "Maneki-Neko": 0.1
     },
     10: { // If horse is level is 10 or higher
         "Big Hay Bale": 0.5, // Adds 1% chance of dropping this item
-        "Maneki-Neko" : 0.5,
-        "Scrap Metal" : 0.1,
-        "Scrap Leather" : 0.1,
+        "Maneki-Neko": 0.5,
+        "Scrap Metal": 0.1,
+        "Scrap Leather": 0.1,
         "Baby Horse Trophy": 0.05, // Adds 0.05% chance of dropping this item
         "Champion Bridle +3": 0.1, // Adds 0.1% chance of dropping this item
         "Champion Saddle Pad +3": 0.1, // Adds 0.1% chance of dropping this item
         "Champion Stirrups +3": 0.1, // Adds 0.1% chance of dropping this item
-        "Clover" : 0.05
+        "Clover": 0.05
     },
     15: { // If horse is level is 15 or higher
-        "Scrap Metal" : 0.15,
-        "Scrap Leather" : 0.15,
+        "Scrap Metal": 0.15,
+        "Scrap Leather": 0.15,
         "Baby Horse Trophy": 0.5, // Adds 0.5% chance of dropping this item
         "Champion Bridle +6": 0.1, // Adds 0.1% chance of dropping this item
         "Champion Saddle Pad +6": 0.1, // Adds 0.1% chance of dropping this item
         "Champion Stirrups +6": 0.1, // Adds 0.1% chance of dropping this item
         "Maneki-Neko": 0.5,
-        "Clover" : 0.1
+        "Clover": 0.1
     },
     20: {
         "Champion Bridle +9": 0.1, // Adds 0.1% chance of dropping this item
         "Champion Saddle Pad +9": 0.1, // Adds 0.1% chance of dropping this item
         "Champion Stirrups +9": 0.1, // Adds 0.1% chance of dropping this item
-        "Clover" : 0.15
+        "Clover": 0.15
     }
 }
 

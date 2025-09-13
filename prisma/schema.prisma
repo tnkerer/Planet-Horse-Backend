@@ -24,6 +24,7 @@ model User {
   requests             BridgeRequest[]
   itemRequests         ItemBridgeRequest[]
   mintRequests         HorseMintRequest[]
+  burnRequests         BurnRequest[]
   createdAt            DateTime            @default(now())
   updatedAt            DateTime?           @updatedAt
   phorse               Float               @default(0)
@@ -103,12 +104,15 @@ model Horse {
   ownedSince    DateTime?
   maxBreeds     Int?
 
-    // NEW: how many trait slots this horse may fill now (2..5)
+  // NEW: how many trait slots this horse may fill now (2..5)
   traitSlotsUnlocked Int @default(2)
 
   // NEW: relation to the per-horse trait rows
   traits       HorseTrait[]
   parents            Int[]
+  
+  // Level up ticket utils
+  usedLevelUpTicket   Boolean @default(false)
 
   @@index([ownerId])  
 }
@@ -152,6 +156,7 @@ model Transaction {
 
   tokenAddress String?
   tokenSymbol  String?
+  tokenId       Int?
 
   // For DEPOSIT rows we set (txId, type, tokenAddress), making duplicates impossible:
   @@unique([txId, type, tokenAddress])
@@ -244,6 +249,21 @@ model HorseTrait {
   @@index([traitId])
 }
 
+model BurnRequest {
+  id           String   @id @default(uuid())
+  requester    User     @relation(fields: [requesterId], references: [id])
+  requesterId  String
+
+  txHash       String
+  tokenAddress String
+  tokenId      Int
+  from         String    // normalized (lowercase) wallet that burned
+  blockNumber  Int
+
+  createdAt    DateTime  @default(now())
+  // (intentionally no unique constraints per your preference)
+}
+
 enum Request {
   DEPOSIT
   WITHDRAW
@@ -262,6 +282,7 @@ enum TransactionType {
   DEPOSIT
   WITHDRAW
   ITEM
+  BURN
 }
 
 enum TransactionStatus {

@@ -7,6 +7,8 @@ import { EquipItemDto } from './dto/equip-item.dto';
 import { UnequipItemDto } from './dto/unequip-item.dto';
 import { IsOwnerGuard } from 'src/guards/is-owner.guard';
 import { IsMultipleOwnerGuard } from 'src/guards/is-multiple-owner.guard';
+import { IsBoolean, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer'
 
 interface ConsumeDto {
   itemName: string;
@@ -15,6 +17,13 @@ interface ConsumeDto {
 
 interface ChangeNicknameDto {
   nickname: string;
+}
+
+class LevelUpDto {
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  useTicket?: boolean = false;
 }
 
 @Controller('horses')
@@ -44,9 +53,11 @@ export class HorseController {
   async levelUp(
     @Request() req,
     @Param('tokenId') tokenId: string,
+    @Body() body: LevelUpDto,
   ) {
     const ownerWallet = req.user.wallet as string;
-    return this.horseService.levelUp(ownerWallet, tokenId);
+    const useTicket = Boolean(body?.useTicket);
+    return this.horseService.levelUp(ownerWallet, tokenId, { useTicket });
   }
 
   /**

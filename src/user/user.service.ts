@@ -20,6 +20,18 @@ type OracleResp = {
     cached: boolean;
 };
 
+const ALLOWED_GENE_IDS = new Set<number>([17000, 17001, 17002]);
+const GENE_ID_TO_NAME: Record<number, string> = {
+    17000: 'Power Genes',
+    17001: 'Speed Genes',
+    17002: 'Sprint Genes',
+};
+const GENE_ID_TO_BASE: Record<number, 'basePower' | 'baseSpeed' | 'baseSprint'> = {
+    17000: 'basePower',
+    17001: 'baseSpeed',
+    17002: 'baseSprint',
+};
+
 @Injectable()
 export class UserService {
     constructor(private readonly prisma: PrismaService, private readonly horseService: HorseService) { }
@@ -35,7 +47,13 @@ export class UserService {
     private oracleCacheAt = 0;
     private readonly ORACLE_TTL_MS = 30_000; // 30s
 
-    async breedHorsesByTokenIds(tokenIdA: string, tokenIdB: string) {
+
+    async breedHorsesByTokenIds(
+        tokenIdA: string,
+        tokenIdB: string,
+        geneA?: number | null,
+        geneB?: number | null,
+    ) {
         if (!tokenIdA || !tokenIdB) {
             throw new BadRequestException('Both token IDs are required');
         }
@@ -49,6 +67,24 @@ export class UserService {
         }
         const numA = Number(tokenIdA);
         const numB = Number(tokenIdB);
+
+        // ── NEW: validate optional genes (max 2, allowed set, no duplicates)
+        const requestedGenes = [geneA ?? null, geneB ?? null].filter(
+            (g): g is number => g != null
+        );
+
+        if (requestedGenes.length > 2) {
+            throw new BadRequestException('You can use up to two genes');
+        }
+        for (const gid of requestedGenes) {
+            if (!ALLOWED_GENE_IDS.has(gid)) {
+                throw new BadRequestException(`Unsupported gene id: ${gid}`);
+            }
+        }
+        // no duplicates per request (mirrors no duplicate per stud)
+        if (requestedGenes.length === 2 && requestedGenes[0] === requestedGenes[1]) {
+            throw new BadRequestException('Duplicate gene not allowed');
+        }
 
         // Fetch both parents in one roundtrip
         const parents = await this.prisma.horse.findMany({
@@ -82,7 +118,7 @@ export class UserService {
             throw new BadRequestException('Both parents must share the same owner');
         }
 
-        // Sex check (one MALE, one FEMALE)
+        // Sex check
         const hasMale = p1.sex === 'MALE' || p2.sex === 'MALE';
         const hasFemale = p1.sex === 'FEMALE' || p2.sex === 'FEMALE';
         if (!hasMale || !hasFemale) {
@@ -105,12 +141,12 @@ export class UserService {
             throw new BadRequestException('You must own both parents for at least 72 hours');
         }
 
-        // Level rule: level == currentBreeds + 1
+        // Level rule
         if (p1.level < (p1.currentBreeds ?? 0) + 1 || p2.level < (p2.currentBreeds ?? 0) + 1) {
             throw new BadRequestException('Horse level is too low for a new breed');
         }
 
-        // Breed limits by rarity (per parent)
+        // Breed limits by rarity
         const toTier = (r: string) => {
             const k = r.toLowerCase();
             if (k === 'common') return 'Common';
@@ -130,14 +166,11 @@ export class UserService {
         }
 
         // ---------- INCEST CHECKS ----------
-        // Parent ↔ child (A is parent of B OR B is parent of A)
         const p1Parents = (parents[0].parents ?? []);
         const p2Parents = (parents[1].parents ?? []);
         if (p1Parents.includes(numB) || p2Parents.includes(numA)) {
             throw new BadRequestException('Breeding between parent and child is not allowed');
         }
-
-        // Siblings (share at least one parent)
         const hasCommonParent =
             p1Parents.length > 0 && p2Parents.length > 0 &&
             p1Parents.some(pid => p2Parents.includes(pid));
@@ -145,16 +178,15 @@ export class UserService {
             throw new BadRequestException('Breeding between siblings is not allowed');
         }
 
-        // --- COSTS (REF: your updated calculateBreedCosts) ---
-        // IMPORTANT: pass TOKEN IDs here (not internal DB ids)
+        // Costs
         const { phorseCost, ronCost } = await this.calculateBreedCosts(tokenIdA, tokenIdB);
 
-        // Prevent duplicate “in-flight” breed for the same pair & owner
+        // Prevent duplicate “in-flight” breed
         const existing = await this.prisma.breed.findFirst({
             where: {
                 ownerId: p1.ownerId,
                 finalized: false,
-                parents: { hasEvery: [numA, numB] }, // works with Postgres int[]; order-independent
+                parents: { hasEvery: [numA, numB] },
             },
             select: { id: true },
         });
@@ -162,14 +194,12 @@ export class UserService {
             throw new BadRequestException('There is already a pending breeding for this pair');
         }
 
-        // --- Determine child rarity from lower tier chances, name, stats, etc. ---
-        // Lower tier (for breeding chances)
+        // Determine child rarity from lower tier chances
         const tierOrder = { Common: 0, Uncommon: 1, Rare: 2, Epic: 3, Legendary: 4, Mythic: 5 };
         const t1 = toTier(p1.rarity);
         const t2 = toTier(p2.rarity);
         const lowerTier = tierOrder[t1] <= tierOrder[t2] ? t1 : t2;
 
-        // Pull chances from rarityBase
         const chances = (rarityBase as any)[lowerTier]?.['Breeding Chances'] as number[] | undefined;
         if (!Array.isArray(chances) || chances.length !== 6) {
             throw new BadRequestException('Invalid rarity chances config');
@@ -185,7 +215,6 @@ export class UserService {
         const rarityMap = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'] as const;
         const childTier = rarityMap[pickWeightedIndex(chances)];
 
-        // Name pool per rarity
         const NAME_POOL = {
             Common: ['Blue Roan', 'Brown', 'Chestnut', 'Dark Bay', 'Gray', 'Light Bay', 'Liver Chestnut', 'Palamino', 'Strawberry Roan', 'White'],
             Uncommon: ['Aquamarine', 'Blue', 'Cyan', 'Dark Green', 'Green', 'Orange', 'Pink', 'Purple', 'Red', 'Yellow'],
@@ -196,7 +225,7 @@ export class UserService {
         } as const;
         const childName = NAME_POOL[childTier][Math.floor(Math.random() * NAME_POOL[childTier].length)];
 
-        // Stats mixing (highest stat from each parent + one from tier range)
+        // Highest stat picks
         const maleStats = [
             { key: 'basePower' as const, val: male.basePower },
             { key: 'baseSprint' as const, val: male.baseSprint },
@@ -224,20 +253,58 @@ export class UserService {
         base[femalePick] = (female as any)[femalePick];
         base[remaining] = tierStat;
 
+        // Apply gene bonuses (+6) AFTER rolls are picked
+        for (const gid of requestedGenes) {
+            const key = GENE_ID_TO_BASE[gid];
+            base[key] += 6;
+        }
+
         const childSex = Math.random() < 0.5 ? 'MALE' : 'FEMALE';
         const childGen = Math.max(p1.gen ?? 0, p2.gen ?? 0) + 1;
         const nowIso = new Date();
 
-        // Next numeric tokenId = MAX(tokenId numeric) + 1 (use one raw SQL)
+        // Next numeric tokenId
         const [{ maxToken }] = await this.prisma.$queryRaw<{ maxToken: bigint | null }[]>`
-        SELECT MAX(CASE WHEN "tokenId" ~ '^[0-9]+$' THEN ("tokenId")::bigint ELSE NULL END) AS "maxToken"
-        FROM "Horse"
-        `;
+    SELECT MAX(CASE WHEN "tokenId" ~ '^[0-9]+$' THEN ("tokenId")::bigint ELSE NULL END) AS "maxToken"
+    FROM "Horse"
+  `;
         const nextTokenId = ((maxToken ?? BigInt(0)) + BigInt(1)).toString();
 
-        // --- Atomic transaction: reserve balances, recheck & bump parents, create child, log ---
+        // ─────────────────────────────────────────────────────────────────────
+        // ATOMIC TRANSACTION — includes: balance reserve, parent rechecks,
+        // breed creation, child creation, and GENE CONSUMPTION.
+        // If anything fails, everything rolls back.
+        // ─────────────────────────────────────────────────────────────────────
         return await this.prisma.$transaction(async (tx) => {
-            // Reserve PHORSE + RON (RON maps to your "wron" balance field)
+            // --- Collect exactly one DB item (string UUID) per requested gene, by NAME ---
+            // NOTE: We pick the oldest first (deterministic), require uses > 0 if column exists.
+            const toConsumeIds: string[] = [];
+
+            if (requestedGenes.length > 0) {
+                for (const gid of requestedGenes) {
+                    const geneName = GENE_ID_TO_NAME[gid];
+
+                    const geneItem = await tx.item.findFirst({
+                        where: {
+                            ownerId: p1.ownerId,
+                            name: geneName,
+                            // If your schema has "uses" and "breakable" columns:
+                            // breakable: true,  // genes are breakable in your config
+                            // uses: { gt: 0 },
+                        },
+                        select: { id: true },
+                        orderBy: { createdAt: 'asc' }, // or id asc if you prefer
+                    });
+
+                    if (!geneItem) {
+                        // User requested a gene they do not (or no longer) own
+                        throw new BadRequestException(`You do not own required gene: ${geneName}`);
+                    }
+                    toConsumeIds.push(geneItem.id); // <-- string UUID
+                }
+            }
+
+            // Reserve PHORSE + WRON
             const dec = await tx.user.updateMany({
                 where: { id: p1.ownerId, phorse: { gte: phorseCost }, wron: { gte: ronCost } },
                 data: {
@@ -247,9 +314,8 @@ export class UserService {
                     burnScore: { increment: phorseCost },
                 },
             });
-            if (dec.count === 0) {
-                throw new BadRequestException('Insufficient balance to breed');
-            }
+            if (dec.count === 0) throw new BadRequestException('Insufficient balance to breed');
+
 
             // Optimistic rechecks + increment breeds
             const recheckA = await tx.horse.updateMany({
@@ -285,6 +351,17 @@ export class UserService {
                 throw new BadRequestException('You already have two active breedings');
             }
 
+            // --- Consume gene items atomically by UUID (string[]) ---
+            if (toConsumeIds.length > 0) {
+                const del = await tx.item.deleteMany({
+                    where: { id: { in: toConsumeIds } }, // <-- string[]
+                });
+                if (del.count !== toConsumeIds.length) {
+                    // Another concurrent request raced these same items; abort safely.
+                    throw new BadRequestException('Gene consumption conflict, please retry');
+                }
+            }
+
             const breed = await tx.breed.create({
                 data: {
                     ownerId: p1.ownerId,
@@ -292,6 +369,8 @@ export class UserService {
                     started: new Date(),
                     tokenId: Number(nextTokenId),
                     finalized: false,
+                    // (Optional) If you have a JSON column, persist which genes were used:
+                    // meta: { genes: requestedGenes }
                 },
                 select: { id: true, parents: true, started: true, finalized: true },
             });
@@ -323,9 +402,9 @@ export class UserService {
                     gen: childGen,
                     currentBreeds: 0,
                     ownedSince: nowIso,
-                    traitSlotsUnlocked: Math.floor(Math.random() * 2) + 2, // 2..3
+                    traitSlotsUnlocked: Math.floor(Math.random() * 2) + 2,
                     parents: [numA, numB],
-                    maxBreeds: Math.floor(Math.random() * 4) // 0..3
+                    maxBreeds: Math.floor(Math.random() * 4),
                 },
                 select: {
                     id: true, tokenId: true, name: true, rarity: true, sex: true,
@@ -333,7 +412,7 @@ export class UserService {
                 },
             });
 
-            // Log
+            // Log PHORSE spend (you can also log WRON)
             await tx.transaction.create({
                 data: {
                     ownerId: p1.ownerId,
@@ -341,7 +420,7 @@ export class UserService {
                     status: TransactionStatus.COMPLETED,
                     value: phorseCost,
                     tokenSymbol: 'PHORSE',
-                    note: `Breed: ${p1.tokenId} × ${p2.tokenId} → ${child.tokenId} (${child.rarity}); PHORSE=${phorseCost}, RON=${ronCost}`,
+                    note: `Breed: ${p1.tokenId} × ${p2.tokenId} → ${child.tokenId} (${child.rarity}); PHORSE=${phorseCost}, RON=${ronCost}${requestedGenes.length ? `; Genes=${requestedGenes.join(',')}` : ''}`,
                 },
             });
 
@@ -932,7 +1011,7 @@ export class UserService {
         let rawPhorse = baseUsdWithModifier / usd + maxCurrentBreeds * usd;
 
         if (horses[0].gen > 0 || horses[1].gen > 0) {
-           rawPhorse = rawPhorse * 1.80;
+            rawPhorse = rawPhorse * 1.80;
         }
 
         if (!Number.isFinite(rawPhorse) || rawPhorse <= 0) {

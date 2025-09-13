@@ -192,187 +192,210 @@ export class HorseService {
   async levelUp(
     ownerWallet: string,
     tokenId: string,
-  ): Promise<{
-    level: number;
-    currentPower: number;
-    currentSprint: number;
-    currentSpeed: number;
-    currentEnergy: number;
-    maxEnergy: number;
-    exp: number;
-    upgradable: boolean;
-    userPhorse: number;
-    userMedals: number;
-  }> {
-    return await this.prisma.$transaction(async (tx) => {
-      // 1) Lookup user & their phorse/medals balance
-      const user = await tx.user.findUnique({
-        where: { wallet: ownerWallet },
-        select: { id: true, phorse: true, medals: true, totalPhorseSpent: true, burnScore: true, presalePhorse: true },
-      });
-      if (!user) throw new NotFoundException('User not found');
+    opts: { useTicket?: boolean } = {},
+  ) {
+    const useTicket = !!opts.useTicket;
 
-      // 2) Fetch the horse & basic fields
-      const horse = await tx.horse.findUnique({
-        where: { tokenId },
-        select: {
-          id: true,
-          ownerId: true,
-          upgradable: true,
-          exp: true,
-          level: true,
-          currentPower: true,
-          currentSprint: true,
-          currentSpeed: true,
-          currentEnergy: true,
-          maxEnergy: true,
-          rarity: true,
-          status: true,
-          equipments: true
-        },
-      });
-      if (!horse) throw new NotFoundException('Horse not found');
-      if (horse.ownerId !== user.id) {
-        throw new ForbiddenException('Not your horse');
-      }
-      if (!horse.upgradable) {
-        throw new BadRequestException('Horse is not currently upgradable');
-      }
+    // ---------- READS & COMPUTATIONS OUTSIDE TX (unchanged from your snippet) ----------
+    const user = await this.prisma.user.findUnique({
+      where: { wallet: ownerWallet },
+      select: {
+        id: true,
+        phorse: true,
+        medals: true,
+        totalPhorseSpent: true,
+        burnScore: true,
+        presalePhorse: true,
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
 
-      const {
-        id: horseId,
-        exp: currentXp,
-        level: oldLevel,
-        currentPower,
-        currentSprint,
-        currentSpeed,
-        currentEnergy,
-        maxEnergy,
-        rarity,
-        status,
-        equipments
-      } = horse;
+    const horse = await this.prisma.horse.findUnique({
+      where: { tokenId },
+      select: {
+        id: true,
+        ownerId: true,
+        upgradable: true,
+        exp: true,
+        level: true,
+        currentPower: true,
+        currentSprint: true,
+        currentSpeed: true,
+        currentEnergy: true,
+        maxEnergy: true,
+        rarity: true,
+        status: true,
+        equipments: true,
+        usedLevelUpTicket: true, // NEW
+      },
+    });
+    if (!horse) throw new NotFoundException('Horse not found');
+    if (horse.ownerId !== user.id) throw new ForbiddenException('Not your horse');
+    if (!useTicket && !horse.upgradable) {
+      throw new BadRequestException('Horse is not currently upgradable');
+    }
+    if (useTicket && horse.usedLevelUpTicket) {
+      throw new BadRequestException('This horse has already used a Level Up Ticket.');
+    }
 
-      const equippedModifiers = equipments
-        .map((item) => itemModifiers[item.name])
-        .filter(Boolean);
+    const equippedModifiers = horse.equipments
+      .map((item) => itemModifiers[item.name])
+      .filter(Boolean);
 
-      const totalModifier = equippedModifiers.reduce(
-        (acc, mod) => ({
-          positionBoost: acc.positionBoost * mod.positionBoost,
-          hurtRate: acc.hurtRate * mod.hurtRate,
-          xpMultiplier: acc.xpMultiplier * mod.xpMultiplier,
-          energySaved: acc.energySaved + mod.energySaved,
-        }),
-        { positionBoost: 1, hurtRate: 1, xpMultiplier: 1, energySaved: 0 }
+    const totalModifier = equippedModifiers.reduce(
+      (acc, mod) => ({
+        positionBoost: acc.positionBoost * mod.positionBoost,
+        hurtRate: acc.hurtRate * mod.hurtRate,
+        xpMultiplier: acc.xpMultiplier * mod.xpMultiplier,
+        energySaved: acc.energySaved + mod.energySaved,
+      }),
+      { positionBoost: 1, hurtRate: 1, xpMultiplier: 1, energySaved: 0 },
+    );
+
+    const baseEnergy = globals['Energy Spent'] as number;
+
+    const requiredXp = xpProgression[horse.level];
+    if (requiredXp === undefined) {
+      throw new BadRequestException(`No XP requirement for level ${horse.level}`);
+    }
+    if (horse.exp < requiredXp) {
+      throw new BadRequestException(
+        `Not enough XP: need ${requiredXp}, have ${horse.exp}`,
       );
+    }
 
-      const baseEnergy = globals['Energy Spent'] as number;
+    const rarityInfo = rarityBase[horse.rarity as keyof typeof rarityBase];
+    if (!rarityInfo) throw new BadRequestException(`Invalid rarity: ${horse.rarity}`);
+    const minG = rarityInfo['Growth Min'];
+    const maxG = rarityInfo['Growth Max'];
+    const rollGrowth = () => Math.random() * (maxG - minG) + minG;
 
-      // 3) Determine XP requirement for current level
-      const requiredXp = xpProgression[oldLevel];
-      if (requiredXp === undefined) {
-        throw new BadRequestException(`No XP requirement for level ${oldLevel}`);
+    const incPower = rollGrowth() * 2;
+    const incSprint = rollGrowth() * 2;
+    const incSpeed = rollGrowth() * 2;
+
+    const newLevel = horse.level + 1;
+    const maxLevelForRarity = levelLimits[horse.rarity];
+    if (maxLevelForRarity === undefined) {
+      throw new BadRequestException(`Unknown level cap for rarity: ${horse.rarity}`);
+    }
+    if (newLevel > maxLevelForRarity) {
+      throw new BadRequestException(`Max level for ${horse.rarity} horses is ${maxLevelForRarity}`);
+    }
+
+    const rarityMult = lvlUpRarityMultiplier[horse.rarity as keyof typeof lvlUpRarityMultiplier];
+    if (!rarityMult) throw new BadRequestException(`No rarity multiplier for rarity ${horse.rarity}`);
+
+    const rawPhorse = lvlUpFee.phorse[horse.level];
+    const rawMedals = lvlUpFee.medals[horse.level];
+    if (rawPhorse === undefined || rawMedals === undefined) {
+      throw new BadRequestException(`No fee defined for level ${horse.level}`);
+    }
+
+    const phorseCost = useTicket ? 0 : Math.ceil(rawPhorse * rarityMult.phorse);
+    const medalCost = useTicket ? 0 : Math.ceil(rawMedals * rarityMult.medals);
+
+    if (!useTicket && user.phorse < phorseCost) {
+      throw new BadRequestException(
+        `Not enough PHORSE: need ${phorseCost}, have ${user.phorse}`,
+      );
+    }
+    if (!useTicket && user.medals < medalCost) {
+      throw new BadRequestException(
+        `Not enough medals: need ${medalCost}, have ${user.medals}`,
+      );
+    }
+
+    const updatedPower = horse.currentPower + incPower;
+    const updatedSprint = horse.currentSprint + incSprint;
+    const updatedSpeed = horse.currentSpeed + incSpeed;
+    const updatedMaxEnergy = horse.maxEnergy + 4;
+    const updatedCurrentEnergy = horse.currentEnergy + 4;
+
+    const remainingXp = horse.exp - requiredXp;
+
+    let newUpgradable = false;
+    if (newLevel < maxLevelForRarity) {
+      const nextXpReq = xpProgression[newLevel];
+      if (nextXpReq !== undefined && remainingXp >= nextXpReq) {
+        newUpgradable = true;
       }
-      if (currentXp < requiredXp) {
-        throw new BadRequestException(
-          `Not enough XP: need ${requiredXp}, have ${currentXp}`,
-        );
-      }
+    }
 
-      // 4) Determine growth ranges from rarityBase
-      const rarityInfo = rarityBase[rarity as keyof typeof rarityBase];
-      if (!rarityInfo) {
-        throw new BadRequestException(`Invalid rarity: ${rarity}`);
-      }
-      const minG = rarityInfo['Growth Min'];
-      const maxG = rarityInfo['Growth Max'];
+    const newPresale = Math.max(user.presalePhorse - phorseCost, 0);
 
-      // Helper to roll a single growth
-      const rollGrowth = (): number => {
-        return Math.random() * (maxG - minG) + minG;
-      };
+    // ---------- ATOMIC TX: use ticket (same delete pattern as startRace) and/or take fees + update horse ----------
+    return this.prisma.$transaction(async (tx) => {
+      // If using ticket, fetch & consume ONE item row like in startRace (find → update/delete)
+      if (useTicket) {
+        const ticket = await tx.item.findFirst({
+          where: {
+            ownerId: user.id,
+            name: 'Level Up Ticket',
+          },
+          select: {
+            id: true,
+            breakable: true,
+            uses: true,
+          },
+        });
 
-      // Three independent growth rolls
-      const incPower = rollGrowth() * 2;
-      const incSprint = rollGrowth() * 2;
-      const incSpeed = rollGrowth() * 2;
+        if (!ticket) {
+          throw new BadRequestException('No Level Up Ticket available.');
+        }
 
-      // 5) Determine “level up” cost in phorse & medals for oldLevel
-      const rarityMult = lvlUpRarityMultiplier[rarity as keyof typeof lvlUpRarityMultiplier];
-      if (!rarityMult) throw new BadRequestException(`No rarity multiplier for rarity ${rarity}`);
-
-      const phorseCost = Math.ceil(lvlUpFee.phorse[oldLevel] * rarityMult.phorse);
-      const medalCost = Math.ceil(lvlUpFee.medals[oldLevel] * rarityMult.medals);
-      if (phorseCost === undefined || medalCost === undefined) {
-        throw new BadRequestException(`No fee defined for level ${oldLevel}`);
-      }
-      if (user.phorse < phorseCost) {
-        throw new BadRequestException(
-          `Not enough PHORSE: need ${phorseCost}, have ${user.phorse}`,
-        );
-      }
-      if (user.medals < medalCost) {
-        throw new BadRequestException(
-          `Not enough medals: need ${medalCost}, have ${user.medals}`,
-        );
-      }
-
-      // 6) Compute new stats
-      const newLevel = oldLevel + 1;
-      const maxLevelForRarity = levelLimits[rarity];
-      if (maxLevelForRarity === undefined) {
-        throw new BadRequestException(`Unknown level cap for rarity: ${rarity}`);
-      }
-      if (newLevel > maxLevelForRarity) {
-        throw new BadRequestException(`Max level for ${rarity} horses is ${maxLevelForRarity}`);
-      }
-      const updatedPower = currentPower + incPower;
-      const updatedSprint = currentSprint + incSprint;
-      const updatedSpeed = currentSpeed + incSpeed;
-      const updatedMaxEnergy = maxEnergy + 4;
-      const updatedCurrentEnergy = currentEnergy + 4;
-
-      // 7) Subtract the XP for oldLevel
-      const remainingXp = currentXp - requiredXp;
-
-      // 8) Determine if still upgradable for next level,
-      //    but only if we haven’t already hit the rarity cap:
-      let newUpgradable = false;
-      if (maxLevelForRarity === undefined) {
-        throw new BadRequestException(`Unknown level cap for rarity: ${rarity}`);
-      }
-
-      // Only consider “upgradable” if we’re still below the cap:
-      if (newLevel < maxLevelForRarity) {
-        const nextRequiredXp = xpProgression[newLevel];
-        if (nextRequiredXp !== undefined && remainingXp >= nextRequiredXp) {
-          newUpgradable = true;
+        // Mirror startRace’s decrement/delete logic for breakables
+        if (ticket.breakable) {
+          const newUses = (ticket.uses ?? 0) - 1;
+          if (newUses > 0) {
+            await tx.item.update({
+              where: { id: ticket.id },
+              data: { uses: newUses },
+            });
+          } else {
+            await tx.item.delete({ where: { id: ticket.id } });
+          }
+        } else {
+          // Non-breakable consumable → delete on use
+          await tx.item.delete({ where: { id: ticket.id } });
         }
       }
 
-      const newPresale = Math.max(user.presalePhorse - phorseCost, 0);
-
-      // 9) Perform the combined updates in one operation
-      //   → Update user balances and horse stats atomically
-      const [updatedUser, updatedHorse] = await Promise.all([
-        tx.user.update({
+      // User update (fees only when not using ticket)
+      const userUpdatePromise = useTicket
+        ? tx.user.findUnique({
+          where: { id: user.id },
+          select: { phorse: true, medals: true },
+        })
+        : tx.user.update({
           where: { id: user.id },
           data: {
-            phorse: user.phorse - phorseCost,
-            totalPhorseSpent: user.totalPhorseSpent + phorseCost,
-            burnScore: user.burnScore + phorseCost,
+            phorse: { decrement: phorseCost },
+            medals: { decrement: medalCost },
+            totalPhorseSpent: { increment: phorseCost },
+            burnScore: { increment: phorseCost },
             presalePhorse: newPresale,
-            medals: user.medals - medalCost,
           },
           select: { phorse: true, medals: true },
-        }),
+        });
+
+      // Guarded horse update; if using ticket also ensure it wasn’t used before
+      const horseWhere: any = {
+        id: horse.id,
+        exp: { gte: requiredXp },
+        level: horse.level,
+      };
+      // ignore "upgradable" when using ticket
+      if (!useTicket) {
+        horseWhere.upgradable = true;
+      } else {
+        horseWhere.usedLevelUpTicket = false; // still enforce 1x lifetime ticket use
+      }
+
+      const [updatedUser, updHorse] = await Promise.all([
+        userUpdatePromise,
         tx.horse.updateMany({
-          where: {
-            id: horseId,
-            upgradable: true,
-            exp: { gte: requiredXp },
-          },
+          where: horseWhere,
           data: {
             level: newLevel,
             currentPower: Number(Math.ceil(updatedPower)),
@@ -382,22 +405,23 @@ export class HorseService {
             currentEnergy: updatedCurrentEnergy,
             exp: remainingXp,
             upgradable: newUpgradable,
-            status: (status === 'SLEEP' &&
-              updatedCurrentEnergy > (baseEnergy - 1 - totalModifier.energySaved))
-              ? 'IDLE'
-              : status,
+            status:
+              horse.status === 'SLEEP' &&
+                updatedCurrentEnergy > (baseEnergy - 1 - totalModifier.energySaved)
+                ? 'IDLE'
+                : horse.status,
+            ...(useTicket ? { usedLevelUpTicket: true } : {}),
           },
         }),
       ]);
 
-      if (updatedHorse.count === 0) {
-        // Perhaps someone else leveled this horse simultaneously
+      if (updHorse.count === 0) {
+        // Horse state changed / insufficient XP / ticket already used (when useTicket=true)
         throw new BadRequestException(
-          'Level-up failed: horse was already updated or insufficient XP',
+          'Level-up failed: horse state changed or insufficient XP/ticket.',
         );
       }
 
-      // 10) Return the new horse stats + updated user wallet
       return {
         level: newLevel,
         currentPower: Number(updatedPower.toFixed(2)),
@@ -407,8 +431,8 @@ export class HorseService {
         maxEnergy: updatedMaxEnergy,
         exp: remainingXp,
         upgradable: newUpgradable,
-        userPhorse: updatedUser.phorse,
-        userMedals: updatedUser.medals,
+        userPhorse: updatedUser?.phorse,
+        userMedals: updatedUser?.medals,
       };
     });
   }
