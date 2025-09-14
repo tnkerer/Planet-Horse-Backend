@@ -941,44 +941,42 @@ export class HorseService {
         energySpentByToken[h.tokenId] = Math.max(1, baseEnergy - mods.energySaved);
       }
 
-      // 4) Batch writes (single Promise.all for the main writes)
-      const horseUpdateResults = await Promise.all([
-        // user totals (unchanged math)
+      // 4) Batch all writes
+      await Promise.all([
+        // user
         tx.user.update({
           where: { id: user.id },
           data: {
-            phorse:
-              user.phorse +
-              rawResults.reduce((s, r) => s + r.tokenReward, 0) -
-              totalCost,
+            phorse: user.phorse + rawResults.reduce((s, r) => s + r.tokenReward, 0) - totalCost,
             totalPhorseSpent: user.totalPhorseSpent + totalCost,
             burnScore: user.burnScore + totalCost,
             medals: user.medals + rawResults.reduce((s, r) => s + r.medalReward, 0),
-            totalPhorseEarned:
-              user.totalPhorseEarned +
-              rawResults.reduce((s, r) => s + r.tokenReward, 0),
-            ...(user.lastRace ? {} : { lastRace: new Date() }),
-          },
+            totalPhorseEarned: user.totalPhorseEarned + rawResults.reduce((s, r) => s + r.tokenReward, 0),
+            ...(user.lastRace ? {} : { lastRace: new Date() })
+          }
         }),
         // horses
         Promise.all(itemUsageOps),
-        Promise.all(
-          rawResults.map((r) =>
-            tx.horse.updateMany({
-              where: {
-                tokenId: r.tokenId,
-                status: 'IDLE',
-                currentEnergy: { gte: energySpentByToken[r.tokenId] }, // guard
-              },
-              data: {
-                exp: { increment: r.xpReward },                        // ← atomic XP
-                currentEnergy: { decrement: energySpentByToken[r.tokenId] }, // ← atomic energy
-                status: r.finalStatus,
-                upgradable: r.upgradable,
-              },
-            })
-          )
-        ),
+        Promise.all(rawResults.map(r =>
+          tx.horse.update({
+            where: { tokenId: r.tokenId },
+            data: {
+              exp: r.updatedExp,
+              currentEnergy: r.newEnergy,
+              status: r.finalStatus,
+              upgradable: r.upgradable,
+            }
+          })
+        )),
+        // history
+        tx.raceHistory.createMany({
+          data: rawResults.map(r => ({
+            horseId: horses.find(h => h.tokenId === r.tokenId)!.id,
+            phorseEarned: r.tokenReward,
+            xpEarned: r.xpReward,
+            position: r.position,
+          })),
+        }),
         // item drops
         itemInserts.length
           ? tx.item.createMany({ data: itemInserts })
@@ -991,27 +989,7 @@ export class HorseService {
             update: { quantity: { increment: count } }
           })
         )),
-      ]).then(([, , perHorseUpdateMany]) => perHorseUpdateMany as Array<{ count: number }>);
-
-      const okTokenIds = new Set<string>();
-      horseUpdateResults.forEach((res, i) => {
-        if (res.count === 1) okTokenIds.add(rawResults[i].tokenId);
-      });
-
-      // One compact createMany for histories (only the OK ones)
-      const historyRows =
-        rawResults
-          .filter((r) => okTokenIds.has(r.tokenId))
-          .map((r) => ({
-            horseId: horses.find((h) => h.tokenId === r.tokenId)!.id,
-            phorseEarned: r.tokenReward,
-            xpEarned: r.xpReward,
-            position: r.position,
-          }));
-
-      if (historyRows.length) {
-        await tx.raceHistory.createMany({ data: historyRows });
-      }
+      ]);
 
       // 5) Return per-horse enriched results
       return rawResults.map(r => ({
