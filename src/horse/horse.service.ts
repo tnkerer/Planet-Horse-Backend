@@ -521,10 +521,8 @@ export class HorseService {
       const hurtChance = Math.min(1, denom > 0 ? 1 / denom : 0);
       const isHurt = Math.random() * totalModifier.hurtRate < hurtChance;
 
-      const sleepThreshold = energySpent;
-
       let finalStatus: 'IDLE' | 'SLEEP' | 'BRUISED' = 'IDLE';
-      if (newEnergy < sleepThreshold) finalStatus = 'SLEEP';
+      if (newEnergy < (baseEnergy - totalModifier.energySaved)) finalStatus = 'SLEEP';
       if (isHurt) finalStatus = 'BRUISED';
 
       const maxLevelForRarity = levelLimits[horse.rarity];
