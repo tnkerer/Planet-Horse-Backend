@@ -1311,14 +1311,13 @@ export const itemDrops = {
         "Hay": 3,  // Adds 5% chance of dropping this item
         "Pumpers": 3, // Adds 5% chance of dropping this item
         "Big Hay Bale": 0.1, // Adds 0.1% chance of dropping this item
-        "Maneki-Neko": 0.1
     },
     10: { // If horse is level is 10 or higher
-        "Big Hay Bale": 0.5, // Adds 1% chance of dropping this item
-        "Maneki-Neko": 0.5,
+        "Big Hay Bale": 0.2, // Adds 1% chance of dropping this item
+        "Maneki-Neko": 0.1,
         "Scrap Metal": 0.1,
         "Scrap Leather": 0.1,
-        "Baby Horse Trophy": 0.05, // Adds 0.05% chance of dropping this item
+        "Baby Horse Trophy": 0.01, // Adds 0.05% chance of dropping this item
         "Champion Bridle +3": 0.1, // Adds 0.1% chance of dropping this item
         "Champion Saddle Pad +3": 0.1, // Adds 0.1% chance of dropping this item
         "Champion Stirrups +3": 0.1, // Adds 0.1% chance of dropping this item
@@ -1327,33 +1326,33 @@ export const itemDrops = {
     15: { // If horse is level is 15 or higher
         "Scrap Metal": 0.15,
         "Scrap Leather": 0.15,
-        "Baby Horse Trophy": 0.5, // Adds 0.5% chance of dropping this item
+        "Baby Horse Trophy": 0.1, // Adds 0.5% chance of dropping this item
         "Champion Bridle +6": 0.1, // Adds 0.1% chance of dropping this item
         "Champion Saddle Pad +6": 0.1, // Adds 0.1% chance of dropping this item
         "Champion Stirrups +6": 0.1, // Adds 0.1% chance of dropping this item
-        "Maneki-Neko": 0.5,
-        "Clover": 0.1
+        "Maneki-Neko": 0.2,
+        "Clover": 0.05
     },
     20: {
-        "Champion Bridle +9": 0.1, // Adds 0.1% chance of dropping this item
-        "Champion Saddle Pad +9": 0.1, // Adds 0.1% chance of dropping this item
-        "Champion Stirrups +9": 0.1, // Adds 0.1% chance of dropping this item
-        "Clover": 0.15
+        "Champion Bridle +9": 0.05, // Adds 0.1% chance of dropping this item
+        "Champion Saddle Pad +9": 0.05, // Adds 0.1% chance of dropping this item
+        "Champion Stirrups +9": 0.05, // Adds 0.1% chance of dropping this item
+        "Clover": 0.1
     }
 }
 
 export const chestDrops = {
     5: { // Level Threshold
-        1: 1, // Drop percetage of chest type 1 adds 1%
+        1: 0.5, // Drop percetage of chest type 1 adds 1%
         2: 0 // Drop percetage of chest type 2 adds 0%
     },
     10: { // Level Threshold
-        1: 1, // Drop percetage of chest type 1 adds 2%
-        2: 1 // Drop percetage of chest type 2 adds 1%
+        1: 0.5, // Drop percetage of chest type 1 adds 2%
+        2: 0.5 // Drop percetage of chest type 2 adds 1%
     },
     15: {
-        1: 1, // Drop percetage of chest type 1 adds 2%
-        2: 1 // Drop percetage of chest type 2 adds 1%
+        1: 0.5, // Drop percetage of chest type 1 adds 2%
+        2: 0.5 // Drop percetage of chest type 2 adds 1%
     }
 }
 
