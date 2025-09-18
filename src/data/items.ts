@@ -1317,7 +1317,6 @@ export const itemDrops = {
         "Maneki-Neko": 0.1,
         "Scrap Metal": 0.1,
         "Scrap Leather": 0.1,
-        "Baby Horse Trophy": 0.01, // Adds 0.05% chance of dropping this item
         "Champion Bridle +3": 0.1, // Adds 0.1% chance of dropping this item
         "Champion Saddle Pad +3": 0.1, // Adds 0.1% chance of dropping this item
         "Champion Stirrups +3": 0.1, // Adds 0.1% chance of dropping this item
