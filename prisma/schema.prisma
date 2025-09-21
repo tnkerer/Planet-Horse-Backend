@@ -25,6 +25,7 @@ model User {
   itemRequests         ItemBridgeRequest[]
   mintRequests         HorseMintRequest[]
   burnRequests         BurnRequest[]
+  stableSale           StableSale?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime?           @updatedAt
   phorse               Float               @default(0)
@@ -353,4 +354,16 @@ model Score {
   points    Int       @default(0)
   createdAt DateTime  @default(now())
   updatedAt DateTime? @updatedAt
+}
+
+model StableSale {
+  id           String    @id @default(uuid())
+  user         User      @relation(fields: [userId], references: [id])
+  userId       String    @unique
+  gtd          Boolean   @default(false)
+  fcfs         Boolean   @default(false)
+  discount     Int       @default(0)
+  gtdUsed      Boolean   @default(false)
+  fcfsUsed     Boolean   @default(false)
+  discountList String[]
 }

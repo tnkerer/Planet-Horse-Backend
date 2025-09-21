@@ -429,4 +429,18 @@ export class UserController {
     return this.users.finalizeBreedingByParents(wallet, dto.a, dto.b);
   }
 
+  /**
+  * GET /user/stable/preflight
+  *
+  * Returns GTD / FCFS / Discount eligibility without mutating state.
+  * Creates a StableSale row for the user on first call (if missing).
+  */
+  @Get('stable/preflight')
+  async stablePreflight(@Req() req) {
+    const wallet = (req.user.wallet as string).toLowerCase();
+    if (!wallet || typeof wallet !== 'string') {
+      throw new BadRequestException('Missing or invalid wallet');
+    }
+    return this.users.preflight(wallet);
+  }
 }

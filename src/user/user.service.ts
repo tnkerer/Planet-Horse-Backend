@@ -32,10 +32,120 @@ const GENE_ID_TO_BASE: Record<number, 'basePower' | 'baseSpeed' | 'baseSprint'> 
     17002: 'baseSprint',
 };
 
+type StableSalePreflightResponse = {
+    eligible: boolean;
+    reasons: string[];
+    sale: {
+        gtd: boolean;
+        fcfs: boolean;
+        discount: number;
+        gtdUsed: boolean;
+        fcfsUsed: boolean;
+        discountList: string[];
+    };
+    // convenience flags for the client UI
+    canUseGtd: boolean;
+    canUseFcfs: boolean;
+    hasDiscount: boolean;          // has a non-zero discount configured
+    discountEligible: boolean;     // discountList contains this wallet (case-insensitive)
+    discountPct: number;           // same as sale.discount
+};
+
 @Injectable()
 export class UserService {
     constructor(private readonly prisma: PrismaService, private readonly horseService: HorseService) { }
 
+    /**
+    * Finds or creates (idempotently) the StableSale row for a given wallet,
+    * then evaluates the *current* eligibility without mutating any "Used" flags.
+    */
+    async preflight(wallet: string): Promise<StableSalePreflightResponse> {
+        const normalized = wallet.trim().toLowerCase();
+        if (!/^0x[a-f0-9]{40}$/.test(normalized)) {
+            throw new BadRequestException('Wallet must be a valid EVM address');
+        }
+
+        // 1) Find user
+        const user = await this.prisma.user.findUnique({
+            where: { wallet: normalized },
+            select: { id: true, wallet: true },
+        });
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
+
+        // 2) Ensure StableSale row exists (idempotent)
+        const sale = await this.prisma.stableSale.upsert({
+            where: { userId: user.id },
+            update: {},
+            create: {
+                userId: user.id,
+                // defaults follow your schema:
+                // gtd: false, fcfs: false, discount: 0, gtdUsed: false, fcfsUsed: false, discountList: []
+            },
+            select: {
+                gtd: true,
+                fcfs: true,
+                discount: true,
+                gtdUsed: true,
+                fcfsUsed: true,
+                discountList: true,
+            },
+        });
+
+        // 3) Compute eligibility snapshot (read-only)
+        const reasons: string[] = [];
+
+        const canUseGtd = Boolean(sale.gtd) && !sale.gtdUsed;
+        if (!canUseGtd) {
+            if (!sale.gtd) reasons.push('GTD not assigned');
+            else if (sale.gtdUsed) reasons.push('GTD already used');
+        }
+
+        const canUseFcfs = Boolean(sale.fcfs) && !sale.fcfsUsed;
+        if (!canUseFcfs) {
+            if (!sale.fcfs) reasons.push('FCFS not assigned');
+            else if (sale.fcfsUsed) reasons.push('FCFS already used');
+        }
+
+        const hasDiscount = (sale.discount ?? 0) > 0;
+        const discountEligible = hasDiscount
+            ? this.includesAddressCaseInsensitive(sale.discountList ?? [], normalized)
+            : false;
+
+        if (hasDiscount && !discountEligible) {
+            reasons.push('Wallet not included in the discount list');
+        }
+        if (!hasDiscount) {
+            reasons.push('No discount configured');
+        }
+
+        const eligible = canUseGtd || canUseFcfs || (hasDiscount && discountEligible);
+
+        return {
+            eligible,
+            reasons,
+            sale: {
+                gtd: sale.gtd,
+                fcfs: sale.fcfs,
+                discount: sale.discount,
+                gtdUsed: sale.gtdUsed,
+                fcfsUsed: sale.fcfsUsed,
+                discountList: sale.discountList ?? [],
+            },
+            canUseGtd,
+            canUseFcfs,
+            hasDiscount,
+            discountEligible,
+            discountPct: sale.discount ?? 0,
+        };
+    }
+
+    private includesAddressCaseInsensitive(list: string[], addr: string) {
+        if (!Array.isArray(list) || list.length === 0) return false;
+        const needle = addr.toLowerCase();
+        return list.some((x) => (x || '').toLowerCase() === needle);
+    }
 
     // --- Moralis config (simple & explicit) ---
     private readonly PHORSE_ADDR =
