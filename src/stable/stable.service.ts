@@ -130,4 +130,22 @@ export class StableService {
         };
     }
 
+   /**
+   * Returns the highest tokenId seen across Stable (string tokenId) and StableMintRequest (int tokenId),
+   * and the next tokenId you should allocate.
+   */
+    async getMaxStableTokenId() {
+        const rows = await this.prisma.$queryRaw<Array<{ max_id: number }>>`
+      SELECT GREATEST(
+        COALESCE((SELECT MAX(CAST("tokenId" AS INT)) FROM "Stable"), 0),
+        COALESCE((SELECT MAX("tokenId")             FROM "StableMintRequest"), 0)
+      ) AS max_id
+    `;
+        const maxTokenId = Number(rows?.[0]?.max_id ?? 0);
+        return {
+            maxTokenId,          // e.g., 137
+            nextTokenId: maxTokenId + 1, // e.g., 138
+        };
+    }
+
 }
