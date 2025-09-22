@@ -129,4 +129,15 @@ export class AppController {
       .status(200)
       .send(JSON.stringify(json));
   }
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Get('metadata/stable/:tokenId')
+  async getStableMetadata(@Param('tokenId') tokenId: string, @Res() res: Response) {
+    const json = await this.appService.getStableMetadata(tokenId);
+    res
+      .setHeader('Content-Type', 'application/json; charset=utf-8')
+      .setHeader('Cache-Control', 'public, max-age=300, s-maxage=300')
+      .status(200)
+      .send(JSON.stringify(json));
+  }
 }

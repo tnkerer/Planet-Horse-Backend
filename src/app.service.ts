@@ -78,8 +78,8 @@ export class AppService {
       { trait_type: 'gender', value: this.formatSex(horse.sex) },
       { trait_type: 'breeding count', value: `${horse.currentBreeds}/${horse.maxBreeds ? horse.maxBreeds : 0}` },
 
-      { trait_type: 'parent 1', value: horse.parents[0] ? `${horse.parents[0]}` : 'none'},
-      { trait_type: 'parent 2', value: horse.parents[1] ? `${horse.parents[1]}` : 'none'},
+      { trait_type: 'parent 1', value: horse.parents[0] ? `${horse.parents[0]}` : 'none' },
+      { trait_type: 'parent 2', value: horse.parents[1] ? `${horse.parents[1]}` : 'none' },
 
       { trait_type: 'exp', value: horse.exp, display_type: 'number' },
       { trait_type: 'level', value: horse.level, display_type: 'number' },
@@ -113,6 +113,18 @@ export class AppService {
       external_url: this.externalUrl,
       image,
       attributes: attrs,
+    };
+  }
+
+  async getStableMetadata(_tokenId: string) {
+    return {
+      name: 'Small Stable',
+      description: 'A Planet Horse small stable. Unlock the full potential of your horses!',
+      external_url: this.externalUrl,
+      image: 'https://planethorse.io/assets/game/stables/01-small.png',
+      attributes: [
+        { trait_type: 'Level', value: 1, display_type: null as unknown as undefined },
+      ] as OpenSeaAttribute[],
     };
   }
 }
