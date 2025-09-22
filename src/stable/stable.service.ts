@@ -5,8 +5,8 @@ import { PrismaService } from '../prisma/prisma.service';
 type SalePhase = 'GTD' | 'FCFS';
 
 // Sale windows (UTC)
-const GTD_START_EPOCH = 1758513995;  // 2025-09-22 13:00:00 UTC
-const FCFS_START_EPOCH = 1758513995; // 2025-09-22 14:00:00 UTC
+const GTD_START_EPOCH = 1758546000;  // 2025-09-22 13:00:00 UTC
+const FCFS_START_EPOCH = 1758549600; // 2025-09-22 14:00:00 UTC
 
 @Injectable()
 export class StableService {
