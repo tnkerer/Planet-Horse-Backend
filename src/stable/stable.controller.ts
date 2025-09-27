@@ -18,4 +18,9 @@ export class StableController {
     getMaxTokenId() {
         return this.stableService.getMaxStableTokenId();
     }
+
+    @Get('blockchain')
+    listFromBlockchain(@Request() req) {
+        return this.stableService.listBlockchainStable(req.user.wallet);
+    }
 }

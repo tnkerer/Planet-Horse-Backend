@@ -8,6 +8,9 @@ import { rarityBase } from '../data/rarity_base';
 import { Status } from '@prisma/client';
 import { EquipItemDto } from './dto/equip-item.dto';
 import { UnequipItemDto } from './dto/unequip-item.dto';
+import { Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import Moralis from 'moralis';
 
 const MORALIS_API_KEY = process.env.MORALIS_API_KEY; // Use .env file for safety
@@ -102,12 +105,70 @@ function samplePosition(dist: number[], rng: () => number = Math.random): number
 
 @Injectable()
 export class HorseService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
+  ) { }
+
+  private static inFlight = new Map<string, Promise<string[]>>();
+  private readonly NFT_TTL_SECONDS = 300; // 5 minutes
 
   private async initMoralis() {
     if (!Moralis.Core.isStarted) {
       await Moralis.start({ apiKey: MORALIS_API_KEY });
     }
+  }
+
+  private makeMoralisKey(wallet: string, contracts: string[]) {
+    const w = wallet.toLowerCase();
+    const c = [...contracts].map(a => a.toLowerCase()).sort().join(',');
+    return `moralis:nfts:${CHAIN_ID}:${w}:${c}`;
+  }
+
+  /** Fetch tokenIds from cache or Moralis (cached for 5 minutes). */
+  private async getWalletTokenIdsCached(
+    walletAddress: string,
+    contracts: string[],
+  ): Promise<string[]> {
+    const key = this.makeMoralisKey(walletAddress, contracts);
+
+    // 1) Fast path: cache
+    const cached = await this.cache.get<string[]>(key);
+    if (cached) return cached;
+
+    // 2) De-dupe concurrent calls (single flight)
+    const running = (this.constructor as typeof HorseService).inFlight.get(key);
+    if (running) return running;
+
+    const p = (async () => {
+      try {
+        const resp = await Moralis.EvmApi.nft.getWalletNFTs({
+          chain: CHAIN_ID,
+          format: 'decimal',
+          normalizeMetadata: false,
+          tokenAddresses: contracts,
+          mediaItems: false,
+          address: walletAddress,
+        });
+
+        const list = (resp as any)?.raw?.result ?? [];
+        const tokenIds = list.map((nft: any) => (BigInt(nft.token_id)).toString());
+
+        // 3) Cache for TTL (note: ttl units are seconds for redis store; works for memory too)
+        await this.cache.set(key, tokenIds, this.NFT_TTL_SECONDS);
+        return tokenIds;
+      } catch (e) {
+        // Optional: stale-on-error — try returning stale value even if TTL lapsed
+        const stale = await this.cache.get<string[]>(key);
+        if (stale) return stale;
+        throw e;
+      } finally {
+        (this.constructor as typeof HorseService).inFlight.delete(key);
+      }
+    })();
+
+    (this.constructor as typeof HorseService).inFlight.set(key, p);
+    return p;
   }
 
   async listBlockchainHorses(walletAddress: string) {
@@ -122,20 +183,9 @@ export class HorseService {
       if (!user) throw new NotFoundException('User not found');
       const userId = user.id;
 
-      // 2) NFTs on-chain
-      const response = await Moralis.EvmApi.nft.getWalletNFTs({
-        chain: CHAIN_ID,
-        format: 'decimal',
-        normalizeMetadata: false,
-        tokenAddresses: [NFT_CONTRACT_ADDRESS, NFT_CONTRACT_ADDRESS_OFH],
-        mediaItems: false,
-        address: walletAddress,
-      });
-      const nftList = response.raw.result;
-      if (!nftList || nftList.length === 0) return [];
-
-
-      const tokenIds = nftList.map((nft: any) => (BigInt(nft.token_id)).toString());
+      // 2) NFTs on-chain (horses) — via cache
+      const tokenIds = await this.getWalletTokenIdsCached(walletAddress, [NFT_CONTRACT_ADDRESS, NFT_CONTRACT_ADDRESS_OFH]);
+      if (!tokenIds.length) return [];
 
       // 3) Horses in DB for those tokenIds
       const horses = await tx.horse.findMany({

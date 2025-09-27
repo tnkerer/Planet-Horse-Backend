@@ -28,10 +28,11 @@ export class UserController {
     const phorse = await this.users.getBalance(req.user.wallet);
     const medals = await this.users.getMedals(req.user.wallet);
     const wron = await this.users.getWron(req.user.wallet);
+    const nickname = await this.users.getNickname(req.user.wallet);
     if (phorse === null || phorse === undefined || wron === undefined) {
       throw new NotFoundException('User not found');
     }
-    return { phorse, medals, wron };
+    return { phorse, medals, wron, nickname };
   }
 
   /**

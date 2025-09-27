@@ -1221,6 +1221,14 @@ export class UserService {
         return u?.wron;
     }
 
+    async getNickname(wallet: string) {
+        const u = await this.prisma.user.findUnique({
+            where: { wallet },
+            select: { discordTag: true},
+        });
+        return u?.discordTag ? String(u?.discordTag) : `${wallet.slice(0, 8)}...`;
+    }
+
     // ------------------- ITEMS SECTION -----------------------
 
     /**

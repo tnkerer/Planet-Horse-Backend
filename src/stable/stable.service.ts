@@ -1,6 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { Prisma, TransactionStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
+import Moralis from 'moralis';
 
 type SalePhase = 'GTD' | 'FCFS';
 
@@ -8,16 +11,154 @@ type SalePhase = 'GTD' | 'FCFS';
 const GTD_START_EPOCH = 1758546000;  // 2025-09-22 13:00:00 UTC
 const FCFS_START_EPOCH = 1758549600; // 2025-09-22 14:00:00 UTC
 
+const STABLE_CONTRACT_ADDRESS = '0x0d9e46be52fde86a0f1070725179b7a0d59229f7';
+const CHAIN_ID = 2020;
+
 @Injectable()
 export class StableService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(
+        private readonly prisma: PrismaService,
+        @Inject(CACHE_MANAGER) private readonly cache: Cache
+    ) { }
+
+    private static inFlight = new Map<string, Promise<string[]>>();
+    private readonly NFT_TTL_SECONDS = 300;
+
+    // --- Moralis bootstrap (same pattern as horses.service) ---
+    private moralisReady = false;
+    private async initMoralis() {
+        if (!this.moralisReady) {
+            await Moralis.start({ apiKey: process.env.MORALIS_API_KEY as string });
+            this.moralisReady = true;
+        }
+    }
+
+    private makeMoralisKey(wallet: string, contracts: string[]) {
+        const w = wallet.toLowerCase();
+        const c = [...contracts].map(a => a.toLowerCase()).sort().join(',');
+        return `moralis:nfts:${CHAIN_ID}:${w}:${c}`;
+    }
+
+    private async getWalletTokenIdsCached(
+        walletAddress: string,
+        contracts: string[],
+    ): Promise<string[]> {
+        const key = this.makeMoralisKey(walletAddress, contracts);
+
+        // 1) Fast path: cache
+        const cached = await this.cache.get<string[]>(key);
+        if (cached) return cached;
+
+        // 2) De-dupe concurrent calls (single flight)
+        const running = (this.constructor as typeof StableService).inFlight.get(key);
+        if (running) return running;
+
+        const p = (async () => {
+            try {
+                const resp = await Moralis.EvmApi.nft.getWalletNFTs({
+                    chain: CHAIN_ID,
+                    format: 'decimal',
+                    normalizeMetadata: false,
+                    tokenAddresses: contracts,
+                    mediaItems: false,
+                    address: walletAddress,
+                });
+
+                const list = (resp as any)?.raw?.result ?? [];
+                const tokenIds = list.map((nft: any) => (BigInt(nft.token_id)).toString());
+
+                // 3) Cache for TTL (note: ttl units are seconds for redis store; works for memory too)
+                await this.cache.set(key, tokenIds, this.NFT_TTL_SECONDS);
+                return tokenIds;
+            } catch (e) {
+                // Optional: stale-on-error — try returning stale value even if TTL lapsed
+                const stale = await this.cache.get<string[]>(key);
+                if (stale) return stale;
+                throw e;
+            } finally {
+                (this.constructor as typeof StableService).inFlight.delete(key);
+            }
+        })();
+
+        (this.constructor as typeof StableService).inFlight.set(key, p);
+        return p;
+    }
 
     /**
-     * Buys a Stable for the user identified by wallet, during a given sale phase.
-     * Atomic: debits WRON, mints Stable, enqueues StableMintRequest, flips flags, clears discount.
-     *
-     * Returns a small receipt with price charged and the issued tokenId.
+     * Scan the wallet's Stable NFTs on-chain and sync DB ownership.
+     * Returns ONLY the stable with the LOWEST tokenId (as a single-element array),
+     * decorated with `{ isDeposit: true }` to match your horses return shape.
      */
+    async listBlockchainStable(walletAddress: string) {
+        // await this.initMoralis();
+
+        return await this.prisma.$transaction(async (tx) => {
+            // 1) User
+            const user = await tx.user.findUnique({
+                where: { wallet: walletAddress.toLowerCase() },
+                select: { id: true },
+            });
+            if (!user) throw new NotFoundException('User not found');
+            const userId = user.id;
+
+            // 2) NFTs on-chain (only Stable contract)
+            const tokenIds = await this.getWalletTokenIdsCached(walletAddress, [STABLE_CONTRACT_ADDRESS]);
+            if (!tokenIds.length) return [];
+
+            // 3) Stables in DB for those tokenIds
+            const stables = await tx.stable.findMany({
+                where: { tokenId: { in: tokenIds } },
+                select: { id: true, tokenId: true, userId: true },
+            });
+
+            const mismatchedStableIds = stables
+                .filter(s => s.userId !== userId)
+                .map(s => s.id);
+
+            // 4) Fix ownership in ONE statement (only when owner differs)
+            if (mismatchedStableIds.length > 0) {
+                await tx.$executeRaw`
+          UPDATE "Stable"
+          SET "userId" = ${userId},
+              "updatedAt" = NOW()
+          WHERE "id" = ANY(${mismatchedStableIds})
+            AND "userId" <> ${userId}
+        `;
+            }
+
+            // 5) Fetch details and pick the LOWEST tokenId
+            const details = await tx.stable.findMany({
+                where: { tokenId: { in: tokenIds } },
+                // include whatever you want here; keeping it light:
+                include: { horses: { select: { id: true } } },
+            });
+
+            if (details.length === 0) return [];
+
+            const withNumeric = details.map(s => ({
+                s,
+                n: Number(s.tokenId), // tokenId stored as text; safe for '1'..'400'
+            })).filter(x => Number.isFinite(x.n));
+
+            if (withNumeric.length === 0) return [];
+
+            const lowest = withNumeric.reduce((a, b) => (b.n < a.n ? b : a)).s;
+
+            return [
+                {
+                    ...lowest,
+                    isDeposit: true,
+                },
+            ];
+        });
+    }
+
+    /**
+    * Buys a Stable for the user identified by wallet, during a given sale phase.
+    * Atomic: debits WRON, mints Stable, enqueues StableMintRequest, flips flags, clears discount.
+    *
+    * Returns a small receipt with price charged and the issued tokenId.
+    */
     async buyStable(wallet: string, salePhase: SalePhase) {
         if (!wallet) throw new BadRequestException('wallet is required');
         if (salePhase !== 'GTD' && salePhase !== 'FCFS') {
@@ -130,10 +271,10 @@ export class StableService {
         };
     }
 
-   /**
-   * Returns the highest tokenId seen across Stable (string tokenId) and StableMintRequest (int tokenId),
-   * and the next tokenId you should allocate.
-   */
+    /**
+    * Returns the highest tokenId seen across Stable (string tokenId) and StableMintRequest (int tokenId),
+    * and the next tokenId you should allocate.
+    */
     async getMaxStableTokenId() {
         const rows = await this.prisma.$queryRaw<Array<{ max_id: number }>>`
       SELECT GREATEST(

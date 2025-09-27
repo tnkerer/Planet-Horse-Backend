@@ -53,6 +53,9 @@ model User {
   // Upgrade Score
   upgradeScore         Int                 @default(0)
   burnScore            Int                 @default(0)
+
+  // Stables
+  leases             StableLease[]
 }
 
 model ReferralXPLog {
@@ -374,18 +377,6 @@ model StableSale {
   discountList String[]
 }
 
-model Stable {
-  id           String    @id @default(uuid())
-  tokenId      String    @unique
-  user         User      @relation(fields: [userId], references: [id])
-  userId       String    @unique
-  horses       Horse[]
-  features     String[]
-  level        Int       @default(1)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime? @updatedAt
-}
-
 model StableMintRequest {
   id          String        @id @default(uuid())
   owner       User          @relation(fields: [requesterId], references: [id])
@@ -396,3 +387,111 @@ model StableMintRequest {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime?         @updatedAt
 }
+
+
+// STABLES FEATURE
+/// Which currency a listing or payment uses.
+/// If OTHER, we capture tokenAddress + tokenSymbol.
+enum StableRentCurrency {
+  PHORSE
+  WRON
+  OTHER
+}
+
+enum LeaseStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  TERMINATED  // e.g., stable sold mid-week
+}
+
+enum EscrowStatus {
+  HELD
+  PARTIAL     // some funds released/refunded
+  RELEASED    // fully released to owner
+  REFUNDED    // fully refunded to renter
+}
+
+/// Single active listing per stable.
+/// Weekly price PER SLOT, owner chooses how many slots to list.
+model Stable {
+  id              String    @id @default(uuid())
+  tokenId         String    @unique
+  user            User      @relation(fields: [userId], references: [id])
+  userId          String
+  horses          Horse[]
+  features        String[]
+  stableListings  StableListing[]
+  stableLeases    StableLease[]
+  level           Int       @default(1)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime? @updatedAt
+  upgrading       Boolean
+  upgradeStarted  DateTime?
+
+  @@index([userId])
+}
+
+model StableListing {
+  id               String              @id @default(uuid())
+  stable           Stable              @relation(fields: [stableId], references: [id], onDelete: Cascade)
+  stableId         String              @unique
+
+  isOpen           Boolean             @default(false)    // discoverable in public search
+  listedSlots      Int                 @default(0)        // how many spare slots are up for rent
+
+  currency         StableRentCurrency
+  pricePerSlotWk   Decimal             @db.Decimal(78, 18)
+
+  // Only required if currency = OTHER
+  tokenAddress     String?
+  tokenSymbol      String?
+
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([isOpen])
+  @@index([currency])
+  @@index([tokenAddress])
+}
+
+/// A 1-week lease with minimal escrow info.
+/// Service computes escrowAmount = slotCount * pricePerSlotWk at creation.
+model StableLease {
+  id               String              @id @default(uuid())
+  stable           Stable              @relation(fields: [stableId], references: [id], onDelete: Cascade)
+  stableId         String
+  lessee           User                @relation(fields: [lesseeId], references: [id])
+  lesseeId         String
+
+  slotCount        Int
+
+  // Snapshot the chosen payment details from the listing
+  currency         StableRentCurrency
+  tokenAddress     String?
+  tokenSymbol      String?
+  pricePerSlotWk   Decimal             @db.Decimal(78, 18)
+
+  // 1-week window (or enforce 7d in service)
+  startAt          DateTime
+  endAt            DateTime
+
+  status           LeaseStatus         @default(PENDING)
+
+  // Minimal escrow tracking
+  escrowAmount     Decimal             @db.Decimal(78, 18) // total held for the week
+  escrowStatus     EscrowStatus        @default(HELD)
+  heldFrom         DateTime
+  heldUntil        DateTime            // usually = endAt
+  releasedAmount   Decimal             @db.Decimal(78, 18) @default(0)
+  refundedAmount   Decimal             @db.Decimal(78, 18) @default(0)
+  terminatedAt     DateTime?
+
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([stableId])
+  @@index([lesseeId])
+  @@index([status, endAt])
+}
+
