@@ -116,14 +116,45 @@ export class AppService {
     };
   }
 
-  async getStableMetadata(_tokenId: string) {
+  async getStableMetadata(tokenId: string) {
+    const stable = await this.prisma.stable.findUnique({
+      where: { tokenId },
+    });
+
+    if (!stable) throw new NotFoundException(`Stable with tokenId ${tokenId} not found`);
+
+    // Get stable name based on level
+    const getStableName = (level: number): string => {
+      switch (level) {
+        case 1: return 'Small Stable';
+        case 2: return 'Medium Stable';
+        case 3: return 'Large Stable';
+        case 4: return 'Haras';
+        default: return 'Small Stable';
+      }
+    };
+
+    // Get stable image based on level
+    const getStableImage = (level: number): string => {
+      switch (level) {
+        case 1: return 'https://planethorse.io/assets/game/stables/01-small.png';
+        case 2: return 'https://planethorse.io/assets/game/stables/02-medium.png';
+        case 3: return 'https://planethorse.io/assets/game/stables/03-large.png';
+        case 4: return 'https://planethorse.io/assets/game/stables/04-extra.png';
+        default: return 'https://planethorse.io/assets/game/stables/01-small.png';
+      }
+    };
+
+    const stableName = getStableName(stable.level);
+    const stableImage = getStableImage(stable.level);
+
     return {
-      name: 'Small Stable',
-      description: 'A Planet Horse small stable. Unlock the full potential of your horses!',
+      name: stableName,
+      description: `A Planet Horse ${stableName.toLowerCase()}. Unlock the full potential of your horses!`,
       external_url: this.externalUrl,
-      image: 'https://planethorse.io/assets/game/stables/01-small.png',
+      image: stableImage,
       attributes: [
-        { trait_type: 'Level', value: 1, display_type: null as unknown as undefined },
+        { trait_type: 'Level', value: stable.level, display_type: null as unknown as undefined },
       ] as OpenSeaAttribute[],
     };
   }

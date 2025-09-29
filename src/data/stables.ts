@@ -22,21 +22,21 @@ export const STABLE_LEVELS: Readonly<Record<StableLevel, StableLevelInfo>> = {
     capacity: 16,
     simultaneousBreeds: 8,
     extraEnergyPerTick: 1,
-    upgradeCostPhorse: 200_000
+    upgradeCostPhorse: 0
   },
   2: {
     level: 2,
     capacity: 32,
     simultaneousBreeds: 16,
     extraEnergyPerTick: 3,
-    upgradeCostPhorse: 400_000
+    upgradeCostPhorse: 200_000
   },
   3: {
     level: 3,
     capacity: 64,
     simultaneousBreeds: 32,
     extraEnergyPerTick: 5,
-    upgradeCostPhorse: 600_000
+    upgradeCostPhorse: 400_000
   },
   4: {
     level: 4,
@@ -45,4 +45,10 @@ export const STABLE_LEVELS: Readonly<Record<StableLevel, StableLevelInfo>> = {
     extraEnergyPerTick: 7,
     upgradeCostPhorse: 1_200_000
   },
+} as const;
+
+export const STABLE_UPGRADE_HOURS: Readonly<Record<1 | 2 | 3, number>> = {
+  1: 6,
+  2: 18,
+  3: 54,
 } as const;

@@ -4,6 +4,7 @@ import { UserModule } from 'src/user/user.module';
 import { StableService } from './stable.service';
 import { StableController } from './stable.controller';
 import { CacheModule } from '@nestjs/cache-manager';
+import { IsStableOwnerGuard } from 'src/guards/is-stable-owner.guard';
 
 
 @Module({

@@ -123,6 +123,7 @@ model Horse {
   // Stable
   stable        Stable? @relation(fields: [stableid], references: [id])
   stableid String?
+  lastStableAsignment DateTime?
 
   @@index([ownerId])  
 }

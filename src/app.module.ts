@@ -78,6 +78,7 @@ export class AppModule implements NestModule {
         { path: 'user/set-referred-by', method: RequestMethod.POST},
         { path: 'horses/*', method: RequestMethod.PUT },
         { path: 'simulate', method: RequestMethod.POST },
+        { path: 'stable/*', method: RequestMethod.POST }
         // { path: 'stable/buy', method: RequestMethod.POST}
       )
       .forRoutes('*')

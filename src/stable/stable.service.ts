@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Inject, ForbiddenException } from '@nestjs/common';
 import { Prisma, TransactionStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { STABLE_LEVELS, STABLE_UPGRADE_HOURS, type StableLevel } from 'src/data/stables';
 import type { Cache } from 'cache-manager';
 import Moralis from 'moralis';
 
@@ -287,6 +288,538 @@ export class StableService {
             maxTokenId,          // e.g., 137
             nextTokenId: maxTokenId + 1, // e.g., 138
         };
+    }
+
+    private upgradeHoursFor(level: number): number {
+        return STABLE_UPGRADE_HOURS[level as 1 | 2 | 3] ?? 0;
+    }
+
+    private computeEta(startedAt: Date, levelFrom: number): { eta: Date; secondsLeft: number } {
+        const hrs = this.upgradeHoursFor(levelFrom);
+        const etaMs = startedAt.getTime() + hrs * 3600_000;
+        const nowMs = Date.now();
+        const secondsLeft = Math.max(0, Math.floor((etaMs - nowMs) / 1000));
+        return { eta: new Date(etaMs), secondsLeft };
+    }
+
+    // ---------- UPGRADE: start ----------
+    async startUpgrade(wallet: string, tokenId: string) {
+        if (!wallet) throw new BadRequestException('wallet is required');
+        if (!tokenId) throw new BadRequestException('tokenId is required');
+
+        // Get user
+        const user = await this.prisma.user.findUnique({
+            where: { wallet: wallet.toLowerCase() },
+            select: { id: true },
+        });
+        if (!user) throw new NotFoundException('User not found');
+        const userId = user.id;
+
+        // We’ll do all checks & mutations atomically
+        return this.prisma.$transaction(async (tx) => {
+            // Load the stable (ownership + state)
+            const stable = await tx.stable.findFirst({
+                where: { tokenId, userId },
+                select: { id: true, level: true, upgrading: true },
+            });
+            if (!stable) {
+                // hide existence details to non-owners
+                throw new NotFoundException('Stable not found');
+            }
+            if (stable.level >= 4) {
+                throw new BadRequestException('Stable is already at max level');
+            }
+            if (stable.upgrading) {
+                throw new BadRequestException('Stable is already upgrading');
+            }
+
+            const nextLevel = (stable.level + 1) as 2 | 3 | 4;
+            const cost = STABLE_LEVELS[nextLevel].upgradeCostPhorse;
+
+            // 1) Mark upgrading (guard against races)
+            const marked = await tx.$queryRaw<Array<{ upgradeStarted: Date }>>`
+        UPDATE "Stable"
+        SET "upgrading" = TRUE,
+            "upgradeStarted" = NOW(),
+            "updatedAt" = NOW()
+        WHERE "id" = ${stable.id}
+          AND "userId" = ${userId}
+          AND "upgrading" = FALSE
+          AND "level" = ${stable.level}
+          AND "level" < 4
+        RETURNING "upgradeStarted"
+      `;
+            if (marked.length === 0) {
+                throw new BadRequestException('Unable to start upgrade (race or invalid state)');
+            }
+            const startedAt = marked[0].upgradeStarted;
+
+            // 2) Deduct PHORSE atomically (guard balance)
+            //    If this fails (0 rows), the whole txn is rolled back so "upgrading" won't stick.
+            const deducted = await tx.$executeRaw`
+        UPDATE "User"
+        SET "phorse" = "phorse" - ${cost}
+        WHERE "id" = ${userId}
+          AND "phorse" >= ${cost}
+      `;
+            if ((deducted as number) === 0) {
+                // Revert by throwing; txn will roll back the stable flag as well
+                throw new BadRequestException('Insufficient PHORSE to start upgrade');
+            }
+
+            const { eta, secondsLeft } = this.computeEta(startedAt, stable.level);
+
+            return {
+                tokenId,
+                levelFrom: stable.level,
+                levelTo: nextLevel,
+                cost,
+                startedAt,
+                eta,
+                secondsLeft,
+                upgrading: true,
+            };
+        }, {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            maxWait: 8000,
+            timeout: 15000,
+        });
+    }
+
+    // ---------- UPGRADE: status/eta ----------
+    async getUpgradeEta(wallet: string, tokenId: string) {
+        if (!wallet) throw new BadRequestException('wallet is required');
+        if (!tokenId) throw new BadRequestException('tokenId is required');
+
+        const user = await this.prisma.user.findUnique({
+            where: { wallet: wallet.toLowerCase() },
+            select: { id: true },
+        });
+        if (!user) throw new NotFoundException('User not found');
+        const userId = user.id;
+
+        const stable = await this.prisma.stable.findFirst({
+            where: { tokenId, userId },
+            select: { level: true, upgrading: true, upgradeStarted: true },
+        });
+        if (!stable) throw new NotFoundException('Stable not found');
+
+        const levelFrom = stable.level;
+        const levelTo = Math.min(4, levelFrom + 1);
+
+        if (!stable.upgrading || !stable.upgradeStarted) {
+            return {
+                tokenId,
+                levelFrom,
+                levelTo,
+                upgrading: false,
+                startedAt: null,
+                eta: null,
+                secondsLeft: 0,
+                done: levelFrom >= 4, // nothing to do if already max
+            };
+        }
+
+        const { eta, secondsLeft } = this.computeEta(stable.upgradeStarted, levelFrom);
+        return {
+            tokenId,
+            levelFrom,
+            levelTo,
+            upgrading: true,
+            startedAt: stable.upgradeStarted,
+            eta,
+            secondsLeft,
+            done: secondsLeft === 0,
+        };
+    }
+
+    // ---------- UPGRADE: finish (apply level+1) ----------
+    async finishUpgrade(wallet: string, tokenId: string) {
+        if (!wallet) throw new BadRequestException('wallet is required');
+        if (!tokenId) throw new BadRequestException('tokenId is required');
+
+        const user = await this.prisma.user.findUnique({
+            where: { wallet: wallet.toLowerCase() },
+            select: { id: true },
+        });
+        if (!user) throw new NotFoundException('User not found');
+        const userId = user.id;
+
+        // Apply only if time has elapsed and state is correct — do it in one guarded SQL
+        const updated = await this.prisma.$queryRaw<Array<{ level: number }>>`
+      UPDATE "Stable"
+      SET "level" = "level" + 1,
+          "upgrading" = FALSE,
+          "upgradeStarted" = NULL,
+          "updatedAt" = NOW()
+      WHERE "tokenId" = ${tokenId}
+        AND "userId"  = ${userId}
+        AND "upgrading" = TRUE
+        AND "level" BETWEEN 1 AND 3
+        AND "upgradeStarted" IS NOT NULL
+        AND NOW() >= "upgradeStarted" + (
+          CASE
+            WHEN "level" = 1 THEN interval '6 hours'
+            WHEN "level" = 2 THEN interval '18 hours'
+            WHEN "level" = 3 THEN interval '54 hours'
+            ELSE interval '0 hours'
+          END
+        )
+      RETURNING "level"
+    `;
+
+        if (updated.length === 0) {
+            // Give a precise error if possible
+            const s = await this.prisma.stable.findFirst({
+                where: { tokenId, userId },
+                select: { level: true, upgrading: true, upgradeStarted: true },
+            });
+            if (!s) throw new NotFoundException('Stable not found');
+            if (!s.upgrading || !s.upgradeStarted) {
+                throw new BadRequestException('Stable is not upgrading');
+            }
+
+            // Time not elapsed yet
+            const { secondsLeft } = this.computeEta(s.upgradeStarted, s.level);
+            if (secondsLeft > 0) {
+                throw new BadRequestException(`Upgrade not ready yet. ${secondsLeft}s remaining`);
+            }
+
+            // Fallback
+            throw new BadRequestException('Unable to finish upgrade (invalid state)');
+        }
+
+        // The RETURNING level is the new level (already incremented)
+        return {
+            tokenId,
+            newLevel: updated[0].level,
+            message: 'Upgrade finalized',
+        };
+    }
+
+    /**
+   * Stable status for UI:
+   * - level, upgrading, upgradeStarted
+   * - upgradeEndsAt & upgradeRemainingSeconds (if upgrading)
+   * - horsesHoused (count)
+   * - capacity / simultaneousBreeds / extraEnergyPerTick (from static data)
+   */
+    async getStableStatus(_wallet: string, tokenId: string) {
+        const row = await this.prisma.stable.findUnique({
+            where: { tokenId },
+            select: {
+                id: true,
+                tokenId: true,
+                level: true,
+                upgrading: true,
+                upgradeStarted: true,
+                _count: { select: { horses: true } },
+                userId: true,
+            },
+        });
+        if (!row) throw new NotFoundException('Stable not found');
+
+        // Clamp & map level to static info
+        const lvl = Math.max(1, Math.min(4, row.level)) as StableLevel;
+        const info = STABLE_LEVELS[lvl];
+
+        // Compute ETA if upgrading
+        let upgradeEndsAt: string | null = null;
+        let upgradeRemainingSeconds: number | null = null;
+
+        if (row.upgrading && row.upgradeStarted && lvl < 4) {
+            const hours = STABLE_UPGRADE_HOURS[lvl] ?? 0;
+            const ends = new Date(row.upgradeStarted.getTime() + hours * 3600 * 1000);
+            upgradeEndsAt = ends.toISOString();
+            const rem = Math.max(0, Math.floor((ends.getTime() - Date.now()) / 1000));
+            upgradeRemainingSeconds = rem;
+        }
+
+        return {
+            tokenId: row.tokenId,
+            level: lvl,
+            upgrading: !!row.upgrading,
+            upgradeStarted: row.upgradeStarted ? row.upgradeStarted.toISOString() : null,
+            upgradeEndsAt,
+            upgradeRemainingSeconds,
+
+            horsesHoused: row._count.horses,
+
+            // Useful static data for UI
+            capacity: info.capacity,
+            simultaneousBreeds: info.simultaneousBreeds,
+            extraEnergyPerTick: info.extraEnergyPerTick,
+        };
+    }
+
+    /**
+       * Assign a user's horse to their stable (up to capacity).
+       * - Only the *stable owner* and *horse owner* may do this.
+       * - Fails if horse already assigned.
+       * - Sets horse.stable (relation) and horse.lastStableAsignment = NOW()
+       *   (spelling kept as requested).
+       */
+    async assignHorseToStable(
+        wallet: string,
+        stableTokenId: string,
+        horseId: number,
+    ) {
+        if (!wallet) throw new BadRequestException('wallet is required');
+        if (!stableTokenId) throw new BadRequestException('stable tokenId is required');
+        if (!Number.isFinite(horseId)) throw new BadRequestException('horseId must be a number');
+
+        return this.prisma.$transaction(async (tx) => {
+            // 1) Identify user
+            const user = await tx.user.findUnique({
+                where: { wallet: wallet.toLowerCase() },
+                select: { id: true },
+            });
+            if (!user) throw new NotFoundException('User not found');
+            const userId = user.id;
+
+            // 2) Stable (must belong to this user)
+            const stable = await tx.stable.findUnique({
+                where: { tokenId: stableTokenId },
+                select: { id: true, userId: true, level: true },
+            });
+            if (!stable) throw new NotFoundException('Stable not found');
+            if (stable.userId !== userId) {
+                throw new ForbiddenException('You are not the owner of this stable');
+            }
+
+            // 3) Horse (must belong to this user and not already assigned)
+            const horse = await tx.horse.findUnique({
+                where: { tokenId: String(horseId) },
+                select: { id: true, ownerId: true, stableid: true },
+            });
+            if (!horse) throw new NotFoundException('Horse not found');
+            if (horse.ownerId !== userId) {
+                throw new ForbiddenException('You are not the owner of this horse');
+            }
+            if (horse.stableid) {
+                throw new BadRequestException('Horse is already assigned to a stable');
+            }
+
+            // 4) Capacity check (race-safe within the same txn)
+            const level = Math.max(1, Math.min(4, stable.level)) as 1 | 2 | 3 | 4;
+            const capacity = STABLE_LEVELS[level].capacity;
+
+            const housed = await tx.horse.count({
+                where: { stableid: stable.id },
+            });
+            if (housed >= capacity) {
+                throw new BadRequestException('Stable is at full capacity');
+            }
+
+            // 5) Assign + set lastStableAsignment = NOW()
+            await tx.horse.update({
+                where: { id: horse.id },
+                data: {
+                    stable: { connect: { id: stable.id } },   // relation connect
+                    lastStableAsignment: new Date(),          // spelling as requested
+                },
+            });
+
+            return {
+                ok: true,
+                stableTokenId,
+                horseId,
+                housedAfter: housed + 1,
+                capacity,
+                message: 'Horse assigned to stable',
+            };
+        }, {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            maxWait: 8000,
+            timeout: 15000,
+        });
+    }
+
+    /**
+     * Remove a user's horse from their stable.
+     * - Only stable owner + horse owner.
+     * - Horse must currently be housed in THIS stable.
+     * - lastStableAsignment must be >= 24h ago.
+     */
+    async removeHorseFromStable(
+        wallet: string,
+        stableTokenId: string,
+        horseId: number,
+    ) {
+        if (!wallet) throw new BadRequestException('wallet is required');
+        if (!stableTokenId) throw new BadRequestException('stable tokenId is required');
+        if (!Number.isFinite(horseId)) throw new BadRequestException('horseId must be a number');
+
+        return this.prisma.$transaction(async (tx) => {
+            // 1) Identify user
+            const user = await tx.user.findUnique({
+                where: { wallet: wallet.toLowerCase() },
+                select: { id: true },
+            });
+            if (!user) throw new NotFoundException('User not found');
+            const userId = user.id;
+
+            // 2) Stable (must belong to this user)
+            const stable = await tx.stable.findUnique({
+                where: { tokenId: stableTokenId },
+                select: { id: true, userId: true, level: true },
+            });
+            if (!stable) throw new NotFoundException('Stable not found');
+            if (stable.userId !== userId) {
+                throw new ForbiddenException('You are not the owner of this stable');
+            }
+
+            // 3) Horse (must belong to this user and be housed in this stable)
+            const horse = await tx.horse.findUnique({
+                where: { tokenId: String(horseId) },
+                select: { id: true, ownerId: true, stableid: true, lastStableAsignment: true },
+            });
+            if (!horse) throw new NotFoundException('Horse not found');
+            if (horse.ownerId !== userId) {
+                throw new ForbiddenException('You are not the owner of this horse');
+            }
+            if (horse.stableid !== stable.id) {
+                throw new BadRequestException('Horse is not currently assigned to this stable');
+            }
+
+            // 4) 24h cooldown since lastStableAsignment
+            const last = horse.lastStableAsignment;
+            if (!last) {
+                // if not set, treat as not removable to be safe
+                throw new BadRequestException('Removal cooldown not satisfied yet');
+            }
+            const now = Date.now();
+            const elapsedMs = now - new Date(last).getTime();
+            const MIN_MS = 24 * 60 * 60 * 1000;
+            if (elapsedMs < MIN_MS) {
+                const remainingMs = MIN_MS - elapsedMs;
+                const remainingHrs = Math.ceil(remainingMs / (60 * 60 * 1000));
+                throw new BadRequestException(`Cannot remove yet. ${remainingHrs}h remaining.`);
+            }
+
+            // 5) Disconnect from stable
+            await tx.horse.update({
+                where: { id: horse.id },
+                data: {
+                    stable: { disconnect: true }, // relation disconnect
+                    // we do NOT change lastStableAsignment on removal
+                },
+            });
+
+            const housedAfter = await tx.horse.count({ where: { stableid: stable.id } });
+            const level = Math.max(1, Math.min(4, stable.level)) as 1 | 2 | 3 | 4;
+
+            return {
+                ok: true,
+                stableTokenId,
+                horseId,
+                housedAfter,
+                capacity: STABLE_LEVELS[level].capacity,
+                message: 'Horse removed from stable',
+            };
+        }, {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            maxWait: 8000,
+            timeout: 15000,
+        });
+    }
+
+    /**
+     * Get stable information by UUID (id field).
+     * Returns detailed stable info including housed horses and static level data.
+     */
+    async getStableByUUID(uuid: string) {
+        if (!uuid) throw new BadRequestException('uuid is required');
+
+        const stable = await this.prisma.stable.findUnique({
+            where: { id: uuid },
+            select: {
+                id: true,
+                tokenId: true,
+                level: true,
+                upgrading: true,
+                upgradeStarted: true,
+                userId: true,
+                createdAt: true,
+                updatedAt: true,
+                horses: {
+                    select: {
+                        id: true,
+                        tokenId: true,
+                        name: true,
+                        lastStableAsignment: true,
+                    },
+                },
+                user: {
+                    select: {
+                        id: true,
+                        wallet: true,
+                    },
+                },
+            },
+        });
+
+        if (!stable) throw new NotFoundException('Stable not found');
+
+        // Clamp & map level to static info
+        const lvl = Math.max(1, Math.min(4, stable.level)) as StableLevel;
+        const info = STABLE_LEVELS[lvl];
+
+        // Compute ETA if upgrading
+        let upgradeEndsAt: string | null = null;
+        let upgradeRemainingSeconds: number | null = null;
+
+        if (stable.upgrading && stable.upgradeStarted && lvl < 4) {
+            const hours = STABLE_UPGRADE_HOURS[lvl] ?? 0;
+            const ends = new Date(stable.upgradeStarted.getTime() + hours * 3600 * 1000);
+            upgradeEndsAt = ends.toISOString();
+            const rem = Math.max(0, Math.floor((ends.getTime() - Date.now()) / 1000));
+            upgradeRemainingSeconds = rem;
+        }
+
+        return {
+            id: stable.id,
+            tokenId: stable.tokenId,
+            level: lvl,
+            upgrading: stable.upgrading,
+            upgradeStarted: stable.upgradeStarted ? stable.upgradeStarted.toISOString() : null,
+            upgradeEndsAt,
+            upgradeRemainingSeconds,
+
+            owner: {
+                id: stable.user.id,
+                wallet: stable.user.wallet,
+            },
+
+            horses: stable.horses.map(h => ({
+                id: h.id,
+                tokenId: h.tokenId,
+                name: h.name,
+                lastStableAsignment: h.lastStableAsignment ? h.lastStableAsignment.toISOString() : null,
+            })),
+
+            horsesHoused: stable.horses.length,
+            capacity: info.capacity,
+            simultaneousBreeds: info.simultaneousBreeds,
+            extraEnergyPerTick: info.extraEnergyPerTick,
+
+            createdAt: stable.createdAt.toISOString(),
+        };
+    }
+
+    async getTokenIdByUUID(stableUUID: string) {
+        if (!stableUUID || typeof stableUUID !== 'string') {
+            throw new BadRequestException('Stable UUID is required.');
+        }
+
+        const stable = await this.prisma.stable.findUnique({
+            where: { id: stableUUID },
+            select: { tokenId: true, userId: true },
+        });
+
+        if (!stable) throw new NotFoundException('Stable not found');
+
+        return { tokenId: stable.tokenId };
     }
 
 }
