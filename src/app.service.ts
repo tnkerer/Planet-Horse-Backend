@@ -149,7 +149,7 @@ export class AppService {
     const stableImage = getStableImage(stable.level);
 
     return {
-      name: stableName,
+      name: `${stableName} #${tokenId}`,
       description: `A Planet Horse ${stableName.toLowerCase()}. Unlock the full potential of your horses!`,
       external_url: this.externalUrl,
       image: stableImage,
