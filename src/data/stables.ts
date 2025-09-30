@@ -43,7 +43,7 @@ export const STABLE_LEVELS: Readonly<Record<StableLevel, StableLevelInfo>> = {
     capacity: 128,
     simultaneousBreeds: 64,
     extraEnergyPerTick: 7,
-    upgradeCostPhorse: 1_200_000
+    upgradeCostPhorse: 600_000
   },
 } as const;
 
