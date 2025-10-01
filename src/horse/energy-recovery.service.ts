@@ -41,6 +41,18 @@ export class EnergyRecoveryService {
 
     return `in ${result}`;
   }
+
+  public getNextStableEnergyTick(): { nextTimestamp: number; humanReadable: string } {
+    later.date.localTime();
+    // 5s jitter like your base cron; 30 = minute, */8 = every 8th hour
+    const cron = '5 30 */8 * * *';
+    const schedule = later.parse.cron(cron, true);
+    const nextDate = later.schedule(schedule).next(1) as Date;
+    return {
+      nextTimestamp: nextDate.getTime(),
+      humanReadable: this.formatTimeDistance(nextDate.getTime() - Date.now()),
+    };
+  }
   // We no longer need to page through batches; a single UPDATE suffices.
   //@Cron('5 0 */6 * * *')
   //@Cron('30 * * * * *')

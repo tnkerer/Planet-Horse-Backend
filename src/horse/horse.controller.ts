@@ -156,6 +156,11 @@ export class HorseController {
     return this.energyRecoveryService.getNextEnergyRecoveryTime();
   }
 
+  @Get('next-stable-energy')
+  getNextStableEnergy() {
+    return this.energyRecoveryService.getNextStableEnergyTick();
+  }
+
   /**
   * PUT /horses/:tokenId/change-nickname
   * Body: { nickname: string }
