@@ -220,14 +220,6 @@ export class UserService {
         if (!p1.stableid || !p2.stableid) {
             throw new BadRequestException('Both parents must be housed in a Stable to breed');
         }
-
-        const activeCount = await this.prisma.breed.count({
-            where: { ownerId: p1.ownerId, finalized: false },
-        });
-        if (activeCount >= 2) {
-            throw new BadRequestException('You already have two active breedings');
-        }
-
         // Same owner
         if (p1.ownerId !== p2.ownerId) {
             throw new BadRequestException('Both parents must share the same owner');
