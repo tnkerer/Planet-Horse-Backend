@@ -204,7 +204,8 @@ export class UserService {
                 level: true, currentBreeds: true, ownedSince: true, gen: true,
                 basePower: true, baseSprint: true, baseSpeed: true,
                 parents: true,
-                maxBreeds: true
+                maxBreeds: true,
+                stableid: true,
             },
         });
 
@@ -215,6 +216,10 @@ export class UserService {
         }
 
         const [p1, p2] = parents;
+
+        if (!p1.stableid || !p2.stableid) {
+            throw new BadRequestException('Both parents must be housed in a Stable to breed');
+        }
 
         const activeCount = await this.prisma.breed.count({
             where: { ownerId: p1.ownerId, finalized: false },
@@ -436,6 +441,7 @@ export class UserService {
                     level: p1.level,
                     currentBreeds: p1.currentBreeds,
                     ownedSince: { lte: new Date(now - minOwnedMs) },
+                    stableid: { not: null },
                 },
                 data: { currentBreeds: { increment: 1 }, status: 'BREEDING', lastBreeding: new Date() },
             });
@@ -449,6 +455,7 @@ export class UserService {
                     level: p2.level,
                     currentBreeds: p2.currentBreeds,
                     ownedSince: { lte: new Date(now - minOwnedMs) },
+                    stableid: { not: null },
                 },
                 data: { currentBreeds: { increment: 1 }, status: 'BREEDING', lastBreeding: new Date() },
             });
@@ -1224,7 +1231,7 @@ export class UserService {
     async getNickname(wallet: string) {
         const u = await this.prisma.user.findUnique({
             where: { wallet },
-            select: { discordTag: true},
+            select: { discordTag: true },
         });
         return u?.discordTag ? String(u?.discordTag) : `${wallet.slice(0, 8)}...`;
     }
