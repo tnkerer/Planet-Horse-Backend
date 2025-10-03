@@ -75,7 +75,7 @@ export class IsOwnerGuard implements CanActivate {
                     // 1. Update ownership
                     await tx.horse.update({
                         where: { tokenId },
-                        data: { ownerId: user.id, ownedSince: new Date() }
+                        data: { ownerId: user.id, ownedSince: new Date(), stableid: null }
                     });
 
                     // 2. Unequip any items

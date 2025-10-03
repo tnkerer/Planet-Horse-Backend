@@ -71,7 +71,7 @@ export class IsPairOwnerGuard implements CanActivate {
     for (const h of parents) {
       if (h.ownerId && h.ownerId !== user.id) {
         await this.prisma.$transaction(async (tx) => {
-          await tx.horse.update({ where: { id: h.id }, data: { ownerId: user.id, ownedSince: new Date() } });
+          await tx.horse.update({ where: { id: h.id }, data: { ownerId: user.id, ownedSince: new Date(), stableid: null } });
           await tx.item.updateMany({ where: { horseId: h.id }, data: { horseId: null } });
         });
       }

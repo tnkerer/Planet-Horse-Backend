@@ -85,7 +85,7 @@ export class IsMultipleOwnerGuard implements CanActivate {
         // reassign ownership
         await tx.horse.updateMany({
           where: { id: { in: mismatchedIds } },
-          data: { ownerId: user.id, ownedSince: new Date() },
+          data: { ownerId: user.id, ownedSince: new Date(), stableid: null },
         });
         // unequip items
         await tx.item.updateMany({
