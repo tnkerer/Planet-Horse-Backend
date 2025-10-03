@@ -1427,6 +1427,20 @@ export class HorseService {
         data: { horseId: horse.id },
       });
 
+      // 🔸 Special case: Baby Ronke Trophy empties energy immediately
+      if (dto.name === 'Baby Ronke Trophy') {
+        const statusAfter = (horse.status === 'IDLE' || horse.status === 'SLEEP')
+          ? 'SLEEP'
+          : horse.status; // keep other statuses (e.g., BREEDING) unchanged
+
+        await tx.horse.update({
+          where: { id: horse.id },
+          data: { currentEnergy: 0, status: statusAfter },
+        });
+
+        return { success: true };
+      }
+
       // Fetch updated equipment (including this newly equipped item)
       const updatedEquipments = [...equippedItems, { name: dto.name }];
 
