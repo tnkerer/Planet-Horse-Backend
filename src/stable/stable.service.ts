@@ -701,8 +701,7 @@ export class StableService {
             await tx.horse.update({
                 where: { id: horse.id },
                 data: {
-                    stable: { disconnect: true }, // relation disconnect
-                    // we do NOT change lastStableAsignment on removal
+                    stableid: null,
                 },
             });
 
