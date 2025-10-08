@@ -528,9 +528,10 @@ export class HorseService {
           positionBoost: acc.positionBoost * mod.positionBoost,
           hurtRate: acc.hurtRate * mod.hurtRate,
           xpMultiplier: acc.xpMultiplier * mod.xpMultiplier,
+          phorseMultiplier: acc.phorseMultiplier * mod.phorseMultiplier,
           energySaved: acc.energySaved + mod.energySaved,
         }),
-        { positionBoost: 1, hurtRate: 1, xpMultiplier: 1, energySaved: 0 }
+        { positionBoost: 1, hurtRate: 1, xpMultiplier: 1, phorseMultiplier: 1, energySaved: 0 }
       );
 
       const energySpent = Math.max(1, baseEnergy - totalModifier.energySaved);
@@ -561,7 +562,7 @@ export class HorseService {
 
       const baseXpReward = Math.floor(xpBase * baseXpMod * (globals['Experience Multiplier'] as number));
       const xpReward = Math.floor(baseXpReward * totalModifier.xpMultiplier);
-      const tokenReward = parseFloat((tokenBase * baseMod).toFixed(2) );
+      const tokenReward = parseFloat((tokenBase * baseMod * Number(totalModifier.phorseMultiplier)).toFixed(2) );
       const medalReward = position === 1 ? 1 :
         position === 2 ? 1 :
           position === 3 ? 1 : 0;
