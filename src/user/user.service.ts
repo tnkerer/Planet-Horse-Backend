@@ -200,7 +200,7 @@ export class UserService {
         const parents = await this.prisma.horse.findMany({
             where: { tokenId: { in: [tokenIdA, tokenIdB] } },
             select: {
-                id: true, tokenId: true, ownerId: true, sex: true, status: true, rarity: true,
+                id: true, tokenId: true, ownerId: true, sex: true, status: true, rarity: true, name: true,
                 level: true, currentBreeds: true, ownedSince: true, gen: true,
                 basePower: true, baseSprint: true, baseSpeed: true,
                 parents: true,
@@ -329,8 +329,23 @@ export class UserService {
             Epic: ['Black Gypsy', 'Nightmare', 'Rainbow', 'White Gypsy', 'Wooden Horse'],
             Legendary: ['Bones', 'Ghost', 'Hologram', 'Hypothetical'],
             Mythic: ['Deathcharger', 'Glitch', 'Wildfire'],
-        } as const;
-        const childName = NAME_POOL[childTier][Math.floor(Math.random() * NAME_POOL[childTier].length)];
+        };
+
+        // --- Special case: if either parent is "Phoenix's Guardian", add it to the Mythic pool ---
+        const mythicPool = [...NAME_POOL.Mythic];
+        if (p1.name === "Phoenix's Guardian" || p2.name === "Phoenix's Guardian") {
+            if (!mythicPool.includes("Phoenix's Guardian")) {
+                mythicPool.push("Phoenix's Guardian");
+            }
+        }
+        // Build a pool map with the (possibly) augmented Mythic list
+        const EFFECTIVE_POOL: typeof NAME_POOL = {
+            ...NAME_POOL,
+            Mythic: mythicPool as typeof NAME_POOL.Mythic,
+        };
+
+        const chosenPool = EFFECTIVE_POOL[childTier];
+        const childName = chosenPool[Math.floor(Math.random() * chosenPool.length)];
 
         // Highest stat picks
         const maleStats = [
