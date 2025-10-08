@@ -1329,7 +1329,7 @@ export const itemDrops = {
         "Champion Bridle +6": 0.1, // Adds 0.1% chance of dropping this item
         "Champion Saddle Pad +6": 0.1, // Adds 0.1% chance of dropping this item
         "Champion Stirrups +6": 0.1, // Adds 0.1% chance of dropping this item
-        "Maneki-Neko": 0.2,
+        "Maneki-Neko": 0.25,
         "Clover": 0.05
     },
     20: {
