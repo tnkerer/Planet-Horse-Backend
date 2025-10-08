@@ -468,13 +468,6 @@ export class UserService {
             });
             if (recheckB.count === 0) throw new BadRequestException(`Parent ${p2.tokenId} no longer eligible`);
 
-            const active = await tx.breed.count({
-                where: { ownerId: p1.ownerId, finalized: false },
-            });
-            if (active >= 2) {
-                throw new BadRequestException('You already have two active breedings');
-            }
-
             // --- Consume gene items atomically by UUID (string[]) ---
             if (toConsumeIds.length > 0) {
                 const del = await tx.item.deleteMany({
