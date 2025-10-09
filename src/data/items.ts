@@ -754,7 +754,7 @@ export const items = {
         "uses": 1,
         "chainId": 20000,
         "trophy": true,
-        "chainSrc": 'https://ipfs.io/ipfs/'
+        "chainSrc": 'https://ipfs.io/ipfs/bafybeictadub3lrnvfxdz2cm52nghmkgrr5pktlqtsyofmpzacqs347ale'
     },
     "Red Wolfie Trophy": {
         "name": "Red Wolfie Trophy",
@@ -765,7 +765,7 @@ export const items = {
         "uses": 1,
         "chainId": 21000,
         "trophy": true,
-        "chainSrc": 'https://ipfs.io/ipfs/'
+        "chainSrc": 'https://ipfs.io/ipfs/bafybeicylygnzxevaqfvsfri4aecm2s5z6pg5xfsz44yeduobb7znzblie'
     },
     "JinDaRat": {
         "name": "JinDaRat",
@@ -776,7 +776,7 @@ export const items = {
         "uses": 1,
         "chainId": 22000,
         "trophy": true,
-        "chainSrc": 'https://ipfs.io/ipfs/'
+        "chainSrc": 'https://ipfs.io/ipfs/bafybeidtoxrsjsdl7fdceuojhd56pbhfa6pymajl4yqnqvofcil4mi2vdm'
     },
     "CookieDAO Trophy": {
         "name": "CookieDAO Trophy",
@@ -787,7 +787,7 @@ export const items = {
         "uses": 1,
         "chainId": 23000,
         "trophy": true,
-        "chainSrc": 'https://ipfs.io/ipfs/'
+        "chainSrc": 'https://ipfs.io/ipfs/bafybeicpkhbffrk3xl5h4idzrcz4jrcgfwj7jj4bi4ygrm2bccevaellja'
     }
 }
 
