@@ -556,13 +556,16 @@ export class HorseService {
       // draw a position
       const position = samplePosition(dist);
 
+      const hasJinDaRat = horse.equipments?.some(it => it.name === 'JinDaRat');
+
       // rewards follow from position as you already do
       const rewardsCfg = globals['Rewards'] as Record<string, readonly [number, number]>;
       const [xpBase, tokenBase] = rewardsCfg[position.toString()];
 
       const baseXpReward = Math.floor(xpBase * baseXpMod * (globals['Experience Multiplier'] as number));
       const xpReward = Math.floor(baseXpReward * totalModifier.xpMultiplier);
-      const tokenReward = parseFloat((tokenBase * baseMod * Number(totalModifier.phorseMultiplier)).toFixed(2) );
+      const rawToken = parseFloat((tokenBase * baseMod * Number(totalModifier.phorseMultiplier)).toFixed(2));
+      const tokenReward = (hasJinDaRat && position > 5) ? 0 : rawToken;
       const medalReward = position === 1 ? 1 :
         position === 2 ? 1 :
           position === 3 ? 1 : 0;
@@ -827,8 +830,9 @@ export class HorseService {
             positionBoost: acc.positionBoost * m.positionBoost,
             hurtRate: acc.hurtRate * m.hurtRate,
             xpMultiplier: acc.xpMultiplier * m.xpMultiplier,
-            energySaved: acc.energySaved + m.energySaved
-          }), { positionBoost: 1, hurtRate: 1, xpMultiplier: 1, energySaved: 0 });
+            energySaved: acc.energySaved + m.energySaved,
+            phorseMultiplier: acc.phorseMultiplier * m.phorseMultiplier
+          }), { positionBoost: 1, hurtRate: 1, xpMultiplier: 1, phorseMultiplier: 1, energySaved: 0 });
 
         const energySpent = Math.max(1, baseEnergy - mods.energySaved);
         if (horse.currentEnergy < energySpent) {
@@ -845,8 +849,6 @@ export class HorseService {
         const baseMod = totalStats / (globals['Base Denominator'] as number);
         const baseXpMod = totalStats / 12;
 
-        const baseDenom = globals['Base Denominator'] as number;
-
         // build distribution
         const dist = buildPositionDistribution({
           level: horse.level,
@@ -855,10 +857,14 @@ export class HorseService {
 
         // draw a position
         const position = samplePosition(dist);
+
+        const hasJinDaRat = horse.equipments?.some(it => it.name === 'JinDaRat');
+
         const [xpBase, tokBase] = rewardsCfg[position.toString()];
         const baseXp = Math.floor(xpBase * baseXpMod * xpMultGlobal);
         const xpReward = Math.floor(baseXp * mods.xpMultiplier);
-        const tokenReward = parseFloat((tokBase * baseMod).toFixed(2));
+        const rawToken = parseFloat((tokBase * baseMod * Number(mods.phorseMultiplier)).toFixed(2));
+        const tokenReward = (hasJinDaRat && position > 5) ? 0 : rawToken;
         const medalReward = position === 1 ? 1 :
           position === 2 ? 1 :
             position === 3 ? 1 : 0;
