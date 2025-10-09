@@ -770,7 +770,7 @@ export const items = {
     "JinDaRat": {
         "name": "JinDaRat",
         "src": "rat",
-        "description": "High stakes, high rewards. JinDaRat boost your change of scoring higher positions by 1.36 but you don't get any rewards below 5th position",
+        "description": "High stakes, high rewards. JinDaRat boost your chance of scoring higher positions by 1.36x but you don't get any rewards below 5th position",
         "consumable": false,
         "breakable": false,
         "uses": 1,
