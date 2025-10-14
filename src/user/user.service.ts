@@ -338,9 +338,18 @@ export class UserService {
                 mythicPool.push("Phoenix's Guardian");
             }
         }
+
+        const rarePool = [...NAME_POOL.Rare];
+        if (p1.name === "Akhal-Teke" || p2.name === "Akhal-Teke") {
+            if(!rarePool.includes("Akhal-Teke")){
+                rarePool.push("Akhal-Teke");
+            }
+        }
+
         // Build a pool map with the (possibly) augmented Mythic list
         const EFFECTIVE_POOL: typeof NAME_POOL = {
             ...NAME_POOL,
+            Rare: rarePool as typeof NAME_POOL.Rare,
             Mythic: mythicPool as typeof NAME_POOL.Mythic,
         };
 
