@@ -338,17 +338,17 @@ export class StableService {
 
             // 1) Mark upgrading (guard against races)
             const marked = await tx.$queryRaw<Array<{ upgradeStarted: Date }>>`
-        UPDATE "Stable"
-        SET "upgrading" = TRUE,
-            "upgradeStarted" = NOW(),
-            "updatedAt" = NOW()
-        WHERE "id" = ${stable.id}
-          AND "userId" = ${userId}
-          AND "upgrading" = FALSE
-          AND "level" = ${stable.level}
-          AND "level" < 4
-        RETURNING "upgradeStarted"
-      `;
+              UPDATE "Stable"
+              SET "upgrading" = TRUE,
+                  "upgradeStarted" = NOW(),
+                  "updatedAt" = NOW()
+              WHERE "id" = ${stable.id}
+                AND "userId" = ${userId}
+                AND "upgrading" = FALSE
+                AND "level" = ${stable.level}
+                AND "level" < 4
+              RETURNING "upgradeStarted"
+            `;
             if (marked.length === 0) {
                 throw new BadRequestException('Unable to start upgrade (race or invalid state)');
             }
@@ -357,14 +357,25 @@ export class StableService {
             // 2) Deduct PHORSE atomically (guard balance)
             //    If this fails (0 rows), the whole txn is rolled back so "upgrading" won't stick.
             const deducted = await tx.$executeRaw`
-        UPDATE "User"
-        SET "phorse" = "phorse" - ${cost}
-        WHERE "id" = ${userId}
-          AND "phorse" >= ${cost}
-      `;
+              UPDATE "User"
+              SET "phorse" = "phorse" - ${cost}
+              WHERE "id" = ${userId}
+                AND "phorse" >= ${cost}
+            `;
+
             if ((deducted as number) === 0) {
                 // Revert by throwing; txn will roll back the stable flag as well
                 throw new BadRequestException('Insufficient PHORSE to start upgrade');
+            }
+
+            const newTotalSpent = await tx.$executeRaw`
+                Update "User"
+                SET "totalPhorseSpent" = "totalPhorseSpent" + ${cost}
+                WHERE "id" = ${userId}
+            `;
+
+            if ((newTotalSpent as number) === 0) {
+                throw new BadRequestException('Something Went Wrong while updating stable');
             }
 
             const { eta, secondsLeft } = this.computeEta(startedAt, stable.level);

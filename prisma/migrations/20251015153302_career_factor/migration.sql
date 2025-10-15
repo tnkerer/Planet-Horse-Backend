@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "Horse" ADD COLUMN     "careerfactor" DOUBLE PRECISION NOT NULL DEFAULT 1;
+
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "careerfactor" DOUBLE PRECISION NOT NULL DEFAULT 1;

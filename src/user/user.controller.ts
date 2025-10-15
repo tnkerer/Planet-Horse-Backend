@@ -17,6 +17,14 @@ type BreedDto = {
   geneB?: number | null;
 };
 
+class BreakItemDto {
+  wallet!: string;
+  itemName!: string;
+  uses!: number;
+  quantity!: number;
+  idempotencyKey?: string;
+}
+
 @Controller('user')
 @UseGuards(JwtAuthGuard, ThrottlerGuard)
 export class UserController {
@@ -28,11 +36,13 @@ export class UserController {
     const phorse = await this.users.getBalance(req.user.wallet);
     const medals = await this.users.getMedals(req.user.wallet);
     const wron = await this.users.getWron(req.user.wallet);
+    const shards = await this.users.getShards(req.user.wallet);
     const nickname = await this.users.getNickname(req.user.wallet);
-    if (phorse === null || phorse === undefined || wron === undefined) {
+    const career = await this.users.getCareerFactor(req.user.wallet);
+    if (phorse === null || phorse === undefined || wron === undefined || career === undefined) {
       throw new NotFoundException('User not found');
     }
-    return { phorse, medals, wron, nickname };
+    return { phorse, medals, wron, shards, nickname, career };
   }
 
   /**
@@ -76,10 +86,10 @@ export class UserController {
   }
 
   /** 
-     * POST /user/items/recycle
-     * Body: { name: string; uses: number; quantity: number }
-     * Returns: { rewards: Array<string | null> }
-     */
+  * POST /user/items/recycle
+  * Body: { name: string; uses: number; quantity: number }
+  * Returns: { rewards: Array<string | null> }
+  */
   @Post('items/recycle')
   async recyle(
     @Request() req,
@@ -94,10 +104,18 @@ export class UserController {
     return { rewards };
   }
 
+
+  @Post('items/break')
+  async breakItem(@Request() req, @Body() dto: BreakItemDto) {
+    // Basic DTO sanity — detailed validation happens in service
+    const { itemName, uses, quantity, idempotencyKey } = dto;
+    return this.users.breakItem(req.user.wallet, itemName, uses, quantity, idempotencyKey);
+  }
+
   /**
-   * POST /user/items/upgrade
-   * Body: { name: string }
-   */
+  * POST /user/items/upgrade
+  * Body: { name: string }
+  */
   @Post('items/upgrade')
   async upgradeItem(
     @Request() req,

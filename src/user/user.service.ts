@@ -341,7 +341,7 @@ export class UserService {
 
         const rarePool = [...NAME_POOL.Rare];
         if (p1.name === "Akhal-Teke" || p2.name === "Akhal-Teke") {
-            if(!rarePool.includes("Akhal-Teke")){
+            if (!rarePool.includes("Akhal-Teke")) {
                 rarePool.push("Akhal-Teke");
             }
         }
@@ -1237,6 +1237,22 @@ export class UserService {
         return u?.wron;
     }
 
+    async getShards(wallet: string) {
+        const u = await this.prisma.user.findUnique({
+            where: { wallet },
+            select: { shards: true },
+        });
+        return u?.shards;
+    }
+
+    async getCareerFactor(wallet: string) {
+        const u = await this.prisma.user.findUnique({
+            where: { wallet },
+            select: { careerfactor: true },
+        });
+        return u?.careerfactor.toFixed(2);
+    }
+
     async getNickname(wallet: string) {
         const u = await this.prisma.user.findUnique({
             where: { wallet },
@@ -1249,6 +1265,7 @@ export class UserService {
 
     /**
     * Buy a given chest type/quantity for a user identified by wallet.
+    * Uses PHORSE/USD oracle to convert USD item price -> PHORSE (ceil to integer).
     * Ensures the chestType exists, is not paused, user has enough PHORSE,
     * and then atomically deducts PHORSE + upserts a Chest record.
     */
@@ -1278,10 +1295,30 @@ export class UserService {
             throw new NotFoundException('User not found');
         }
 
-        const price = user.referredById ? def.discountedPrice : def.price;
-        const totalCost = price * chestQuantity;
+        // 2) Get oracle and compute per-chest PHORSE price (ceil)
+        const oracle = await this.getPhorseUsdOracle(); // may throw 503 (ServiceUnavailable) by design
 
-        // 2) Run everything in one Prisma transaction
+        // Safely parse something like "0.01234", "$0.01234", "0,01234", etc.
+        const parsedUsd = Number(String(oracle.usdPriceFormatted).replace(/[^0-9.]/g, ''));
+        if (!Number.isFinite(parsedUsd) || parsedUsd <= 0) {
+            throw new ServiceUnavailableException('Oracle returned an invalid USD price for PHORSE');
+        }
+
+        // Choose USD price from items.ts (referral discount applies in USD)
+        const usdPerChest = user.referredById ? def.discountedPrice : def.price;
+        if (!Number.isFinite(usdPerChest) || usdPerChest <= 0) {
+            throw new BadRequestException('Invalid chest USD price configuration');
+        }
+
+        // Convert USD -> PHORSE and round UP; must be an integer Number
+        const phorsePerChest = Math.ceil(usdPerChest / parsedUsd);
+        if (!Number.isInteger(phorsePerChest) || phorsePerChest < 1) {
+            throw new ServiceUnavailableException('Could not derive a valid PHORSE price from oracle');
+        }
+
+        const totalCost = phorsePerChest * chestQuantity;
+
+        // 3) Run everything in one Prisma transaction
         return this.prisma.$transaction(async (tx) => {
             // A) Deduct PHORSE only if enough balance
             const upd = await tx.user.updateMany({
@@ -1293,7 +1330,7 @@ export class UserService {
                     phorse: { decrement: totalCost },
                     totalPhorseSpent: { increment: totalCost },
                     burnScore: { increment: totalCost },
-                    presalePhorse: { decrement: totalCost }
+                    presalePhorse: { decrement: totalCost },
                 },
             });
             if (upd.count === 0) {
@@ -1301,21 +1338,21 @@ export class UserService {
             }
 
             // B) Look up user id
-            const user = await tx.user.findUnique({
+            const u = await tx.user.findUnique({
                 where: { wallet: ownerWallet },
                 select: { id: true },
             });
-            if (!user) {
+            if (!u) {
                 throw new NotFoundException('User not found');
             }
 
             // C) Upsert Chest
             const chest = await tx.chest.upsert({
                 where: {
-                    ownerId_chestType: { ownerId: user.id, chestType },
+                    ownerId_chestType: { ownerId: u.id, chestType },
                 },
                 create: {
-                    owner: { connect: { id: user.id } },
+                    owner: { connect: { id: u.id } },
                     chestType,
                     quantity: chestQuantity,
                 },
@@ -1324,15 +1361,14 @@ export class UserService {
                 },
             });
 
-            // D) Record the purchase transaction
+            // D) Record the purchase transaction (note includes pricing context)
             await tx.transaction.create({
                 data: {
-                    owner: { connect: { id: user.id } },
+                    owner: { connect: { id: u.id } },
                     type: TransactionType.ITEM,
                     status: TransactionStatus.COMPLETED,
-                    note: `Bought ${chestQuantity} chest(s)`,
+                    note: `Bought ${chestQuantity} chest(s) @ ${phorsePerChest} PHORSE/chest (oracle ${parsedUsd} USD/PHORSE)`,
                     value: totalCost,
-                    // txId: optional on-chain id if you have one
                 },
             });
 
@@ -2596,4 +2632,164 @@ export class UserService {
             return { crafted: target, phorse: bal!.phorse, medals: bal!.medals };
         }, { timeout: 10_000 });
     }
+
+    /**
+ * Destroy up to `quantity` copies of an item (exact `uses` match) and credit shards.
+ * - Requires: item exists in items map and has a numeric `shards` value.
+ * - Only consumes unequipped items (horseId IS NULL).
+ * - Concurrency-safe single-shot delete using SKIP LOCKED.
+ * - Optional idempotencyKey prevents double-charging on retries.
+ *
+ * @returns { destroyed, perItemShards, totalShards, newShards, remaining }
+ */
+    async breakItem(
+        ownerWallet: string,
+        itemName: string,
+        uses: number,
+        quantity: number,
+        idempotencyKey?: string
+    ): Promise<{ destroyed: number; perItemShards: number; totalShards: number; newShards: number; remaining: number }> {
+
+        // 1) Validate item definition & shards
+        const def = (items as Record<string, any>)[itemName];
+        if (!def) {
+            throw new NotFoundException(`Item "${itemName}" does not exist`);
+        }
+        const perItemShards = Number(def.shards ?? 0);
+        if (!Number.isFinite(perItemShards) || perItemShards < 0) {
+            throw new BadRequestException(`Item "${itemName}" has invalid shards value`);
+        }
+
+        // 2) Run as a single transaction
+        return this.prisma.$transaction(async (tx) => {
+            // A) Find user
+            const user = await tx.user.findUnique({
+                where: { wallet: ownerWallet },
+                select: { id: true },
+            });
+            if (!user) throw new NotFoundException('User not found');
+
+            // B) Idempotency short-circuit (if already processed)
+            if (idempotencyKey) {
+                const existing = await tx.transaction.findFirst({
+                    where: {
+                        ownerId: user.id,
+                        type: TransactionType.ITEM,
+                        status: TransactionStatus.COMPLETED,
+                        note: { contains: `[BREAK:${idempotencyKey}]` },
+                    },
+                    select: { value: true }, // we store totalShards in value
+                });
+                if (existing) {
+                    const bal = await tx.user.findUnique({
+                        where: { id: user.id },
+                        select: { shards: true },
+                    });
+                    // destroyed count can be derived because shards per item is constant
+                    const destroyed = perItemShards > 0 ? Math.round(existing.value / perItemShards) : quantity;
+                    return {
+                        destroyed,
+                        perItemShards,
+                        totalShards: existing.value,
+                        newShards: bal!.shards,
+                        remaining: await tx.item.count({
+                            where: { ownerId: user.id, name: itemName, uses, horseId: null },
+                        }),
+                    };
+                }
+            }
+
+            // C) Concurrency-safe delete of exactly N items (oldest first) with SKIP LOCKED
+            type Row = { id: string };
+
+            let rows: Row[];
+
+            // IMPORTANT: handle null uses with IS NULL (not "= NULL")
+            if (uses === null || uses === undefined) {
+                rows = await tx.$queryRaw<Row[]>`
+                WITH picked AS (
+                  SELECT "id"
+                  FROM "Item"
+                  WHERE "ownerId" = ${user.id}
+                    AND "name" = ${itemName}
+                    AND "horseId" IS NULL
+                    AND "uses" IS NULL
+                  ORDER BY "createdAt" ASC
+                  LIMIT ${quantity}
+                  FOR UPDATE SKIP LOCKED
+                )
+                DELETE FROM "Item"
+                WHERE "id" IN (SELECT "id" FROM picked)
+                RETURNING "id";
+              `;
+            } else {
+                rows = await tx.$queryRaw<Row[]>`
+                WITH picked AS (
+                  SELECT "id"
+                  FROM "Item"
+                  WHERE "ownerId" = ${user.id}
+                    AND "name" = ${itemName}
+                    AND "horseId" IS NULL
+                    AND "uses" = ${uses}
+                  ORDER BY "createdAt" ASC
+                  LIMIT ${quantity}
+                  FOR UPDATE SKIP LOCKED
+                )
+                DELETE FROM "Item"
+                WHERE "id" IN (SELECT "id" FROM picked)
+                RETURNING "id";
+              `;
+            }
+
+            const destroyed = rows?.length ?? 0;
+            if (destroyed === 0) {
+                // friendlier message when uses is null
+                const usesMsg = (uses === null || uses === undefined) ? '' : ` (uses=${uses})`;
+                throw new BadRequestException(
+                    `You don’t own any unequipped "${itemName}"${usesMsg}`
+                );
+            }
+            if (destroyed < quantity) {
+                const usesMsg = (uses === null || uses === undefined) ? '' : ` (uses=${uses})`;
+                throw new BadRequestException(
+                    `You only have ${destroyed} "${itemName}"${usesMsg} available to break`
+                );
+            }
+
+            // D) Credit shards in one guarded update
+            const totalShards = perItemShards * destroyed;
+            const updated = await tx.user.update({
+                where: { id: user.id },
+                data: { shards: { increment: totalShards } },
+                select: { shards: true },
+            });
+
+            // E) Log a single ITEM transaction (store totalShards in `value` for idempotency reads)
+            const note = `Broke "${itemName}" (uses=${uses}) x${destroyed}, +${totalShards} shards${idempotencyKey ? ` [BREAK:${idempotencyKey}]` : ''
+                }`;
+            await tx.transaction.create({
+                data: {
+                    ownerId: user.id,
+                    type: TransactionType.ITEM,
+                    status: TransactionStatus.COMPLETED,
+                    value: totalShards, // important: used for idempotency replay
+                    note,
+                },
+            });
+
+            // F) Return snapshot (including how many remain with same filter)
+            const remaining = await tx.item.count({
+                where: { ownerId: user.id, name: itemName, uses, horseId: null },
+            });
+
+            return {
+                destroyed,
+                perItemShards,
+                totalShards,
+                newShards: updated.shards,
+                remaining,
+            };
+        });
+    }
+
 }

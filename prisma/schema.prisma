@@ -32,6 +32,7 @@ model User {
   updatedAt            DateTime?           @updatedAt
   phorse               Float               @default(0)
   wron                 Float               @default(0)
+  shards               Int                 @default(0)
   medals               Int                 @default(0)
   totalPhorseEarned    Float               @default(0)
   totalPhorseSpent     Float               @default(0)
@@ -55,7 +56,8 @@ model User {
   burnScore            Int                 @default(0)
 
   // Stables
-  leases             StableLease[]
+  leases       StableLease[]
+  careerfactor Float         @default(1)
 }
 
 model ReferralXPLog {
@@ -114,28 +116,30 @@ model Horse {
   traitSlotsUnlocked Int @default(2)
 
   // NEW: relation to the per-horse trait rows
-  traits       HorseTrait[]
-  parents            Int[]
-  
+  traits  HorseTrait[]
+  parents Int[]
+
   // Level up ticket utils
-  usedLevelUpTicket   Boolean @default(false)
+  usedLevelUpTicket Boolean @default(false)
 
   // Stable
-  stable        Stable? @relation(fields: [stableid], references: [id])
-  stableid String?
+  stable              Stable?   @relation(fields: [stableid], references: [id])
+  stableid            String?
   lastStableAsignment DateTime?
 
-  @@index([ownerId])  
+  careerfactor Float @default(1)
+
+  @@index([ownerId])
 }
 
 model Breed {
- id            String         @id @default(uuid())
- owner         User           @relation(fields: [ownerId], references: [id])
- ownerId       String
- parents       Int[]
- tokenId       Int?
- started       DateTime?
- finalized     Boolean
+  id        String    @id @default(uuid())
+  owner     User      @relation(fields: [ownerId], references: [id])
+  ownerId   String
+  parents   Int[]
+  tokenId   Int?
+  started   DateTime?
+  finalized Boolean
 }
 
 model Item {
@@ -167,7 +171,7 @@ model Transaction {
 
   tokenAddress String?
   tokenSymbol  String?
-  tokenId       Int?
+  tokenId      Int?
 
   // For DEPOSIT rows we set (txId, type, tokenAddress), making duplicates impossible:
   @@unique([txId, type, tokenAddress])
@@ -194,8 +198,8 @@ model BridgeRequest {
   transactionId String      @unique
   createdAt     DateTime    @default(now())
 
-  tokenSymbol   String?
-  tokenAddress  String?
+  tokenSymbol  String?
+  tokenAddress String?
 
   @@index([tokenSymbol])
   @@index([tokenAddress])
@@ -215,8 +219,8 @@ model ItemBridgeRequest {
 }
 
 model HorseMintRequest {
-  id          String        @id @default(uuid())
-  owner       User          @relation(fields: [requesterId], references: [id])
+  id          String            @id @default(uuid())
+  owner       User              @relation(fields: [requesterId], references: [id])
   requesterId String
   tokenId     Int
   txId        String?
@@ -232,46 +236,46 @@ enum TraitTier {
 }
 
 model TraitCatalog {
-  id    Int    @id    // 1..10 (Racecraft, Iron Hooves, ...)
-  name  String @unique
+  id          Int          @id // 1..10 (Racecraft, Iron Hooves, ...)
+  name        String       @unique
   // add a "key" if you like (e.g., "racecraft")
   HorseTraits HorseTrait[]
 }
 
 model HorseTrait {
-  id        String   @id @default(uuid())
-  horse     Horse    @relation(fields: [horseId], references: [id], onDelete: Cascade)
-  horseId   String
+  id      String @id @default(uuid())
+  horse   Horse  @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  horseId String
 
   // slot 1..5, unique per horse
-  slot      Int
+  slot Int
 
   // which trait and tier
-  trait     TraitCatalog @relation(fields: [traitId], references: [id])
-  traitId   Int
-  tier      TraitTier    @default(COMMON)
+  trait   TraitCatalog @relation(fields: [traitId], references: [id])
+  traitId Int
+  tier    TraitTier    @default(COMMON)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([horseId, slot])        // only one trait per slot
-  @@unique([horseId, traitId])     // cannot duplicate the same trait on a horse
+  @@unique([horseId, slot]) // only one trait per slot
+  @@unique([horseId, traitId]) // cannot duplicate the same trait on a horse
   @@index([horseId])
   @@index([traitId])
 }
 
 model BurnRequest {
-  id           String   @id @default(uuid())
-  requester    User     @relation(fields: [requesterId], references: [id])
-  requesterId  String
+  id          String @id @default(uuid())
+  requester   User   @relation(fields: [requesterId], references: [id])
+  requesterId String
 
   txHash       String
   tokenAddress String
   tokenId      Int
-  from         String    // normalized (lowercase) wallet that burned
+  from         String // normalized (lowercase) wallet that burned
   blockNumber  Int
 
-  createdAt    DateTime  @default(now())
+  createdAt DateTime @default(now())
   // (intentionally no unique constraints per your preference)
 }
 
@@ -337,6 +341,7 @@ model RaceHistory {
   position     Int
   horse        Horse    @relation(fields: [horseId], references: [id])
   horseId      String
+  shardSpent   Float?
 
   @@index([horseId])
 }
@@ -367,20 +372,20 @@ model Score {
 }
 
 model StableSale {
-  id           String    @id @default(uuid())
-  user         User      @relation(fields: [userId], references: [id])
-  userId       String    @unique
-  gtd          Boolean   @default(false)
-  fcfs         Boolean   @default(false)
-  discount     Int       @default(0)
-  gtdUsed      Boolean   @default(false)
-  fcfsUsed     Boolean   @default(false)
+  id           String   @id @default(uuid())
+  user         User     @relation(fields: [userId], references: [id])
+  userId       String   @unique
+  gtd          Boolean  @default(false)
+  fcfs         Boolean  @default(false)
+  discount     Int      @default(0)
+  gtdUsed      Boolean  @default(false)
+  fcfsUsed     Boolean  @default(false)
   discountList String[]
 }
 
 model StableMintRequest {
-  id          String        @id @default(uuid())
-  owner       User          @relation(fields: [requesterId], references: [id])
+  id          String            @id @default(uuid())
+  owner       User              @relation(fields: [requesterId], references: [id])
   requesterId String
   tokenId     Int
   txId        String?
@@ -388,7 +393,6 @@ model StableMintRequest {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime?         @updatedAt
 }
-
 
 // STABLES FEATURE
 /// Which currency a listing or payment uses.
@@ -403,53 +407,53 @@ enum LeaseStatus {
   PENDING
   ACTIVE
   EXPIRED
-  TERMINATED  // e.g., stable sold mid-week
+  TERMINATED // e.g., stable sold mid-week
 }
 
 enum EscrowStatus {
   HELD
-  PARTIAL     // some funds released/refunded
-  RELEASED    // fully released to owner
-  REFUNDED    // fully refunded to renter
+  PARTIAL // some funds released/refunded
+  RELEASED // fully released to owner
+  REFUNDED // fully refunded to renter
 }
 
 /// Single active listing per stable.
 /// Weekly price PER SLOT, owner chooses how many slots to list.
 model Stable {
-  id              String    @id @default(uuid())
-  tokenId         String    @unique
-  user            User      @relation(fields: [userId], references: [id])
-  userId          String
-  horses          Horse[]
-  features        String[]
-  stableListings  StableListing[]
-  stableLeases    StableLease[]
-  level           Int       @default(1)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime? @updatedAt
-  upgrading       Boolean
-  upgradeStarted  DateTime?
+  id             String          @id @default(uuid())
+  tokenId        String          @unique
+  user           User            @relation(fields: [userId], references: [id])
+  userId         String
+  horses         Horse[]
+  features       String[]
+  stableListings StableListing[]
+  stableLeases   StableLease[]
+  level          Int             @default(1)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime?       @updatedAt
+  upgrading      Boolean
+  upgradeStarted DateTime?
 
   @@index([userId])
 }
 
 model StableListing {
-  id               String              @id @default(uuid())
-  stable           Stable              @relation(fields: [stableId], references: [id], onDelete: Cascade)
-  stableId         String              @unique
+  id       String @id @default(uuid())
+  stable   Stable @relation(fields: [stableId], references: [id], onDelete: Cascade)
+  stableId String @unique
 
-  isOpen           Boolean             @default(false)    // discoverable in public search
-  listedSlots      Int                 @default(0)        // how many spare slots are up for rent
+  isOpen      Boolean @default(false) // discoverable in public search
+  listedSlots Int     @default(0) // how many spare slots are up for rent
 
-  currency         StableRentCurrency
-  pricePerSlotWk   Decimal             @db.Decimal(78, 18)
+  currency       StableRentCurrency
+  pricePerSlotWk Decimal            @db.Decimal(78, 18)
 
   // Only required if currency = OTHER
-  tokenAddress     String?
-  tokenSymbol      String?
+  tokenAddress String?
+  tokenSymbol  String?
 
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([isOpen])
   @@index([currency])
@@ -459,40 +463,39 @@ model StableListing {
 /// A 1-week lease with minimal escrow info.
 /// Service computes escrowAmount = slotCount * pricePerSlotWk at creation.
 model StableLease {
-  id               String              @id @default(uuid())
-  stable           Stable              @relation(fields: [stableId], references: [id], onDelete: Cascade)
-  stableId         String
-  lessee           User                @relation(fields: [lesseeId], references: [id])
-  lesseeId         String
+  id       String @id @default(uuid())
+  stable   Stable @relation(fields: [stableId], references: [id], onDelete: Cascade)
+  stableId String
+  lessee   User   @relation(fields: [lesseeId], references: [id])
+  lesseeId String
 
-  slotCount        Int
+  slotCount Int
 
   // Snapshot the chosen payment details from the listing
-  currency         StableRentCurrency
-  tokenAddress     String?
-  tokenSymbol      String?
-  pricePerSlotWk   Decimal             @db.Decimal(78, 18)
+  currency       StableRentCurrency
+  tokenAddress   String?
+  tokenSymbol    String?
+  pricePerSlotWk Decimal            @db.Decimal(78, 18)
 
   // 1-week window (or enforce 7d in service)
-  startAt          DateTime
-  endAt            DateTime
+  startAt DateTime
+  endAt   DateTime
 
-  status           LeaseStatus         @default(PENDING)
+  status LeaseStatus @default(PENDING)
 
   // Minimal escrow tracking
-  escrowAmount     Decimal             @db.Decimal(78, 18) // total held for the week
-  escrowStatus     EscrowStatus        @default(HELD)
-  heldFrom         DateTime
-  heldUntil        DateTime            // usually = endAt
-  releasedAmount   Decimal             @db.Decimal(78, 18) @default(0)
-  refundedAmount   Decimal             @db.Decimal(78, 18) @default(0)
-  terminatedAt     DateTime?
+  escrowAmount   Decimal      @db.Decimal(78, 18) // total held for the week
+  escrowStatus   EscrowStatus @default(HELD)
+  heldFrom       DateTime
+  heldUntil      DateTime // usually = endAt
+  releasedAmount Decimal      @default(0) @db.Decimal(78, 18)
+  refundedAmount Decimal      @default(0) @db.Decimal(78, 18)
+  terminatedAt   DateTime?
 
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([stableId])
   @@index([lesseeId])
   @@index([status, endAt])
 }
-

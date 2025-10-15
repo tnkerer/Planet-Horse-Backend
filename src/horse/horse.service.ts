@@ -219,13 +219,18 @@ export class HorseService {
       // 5) Return horses (with up-to-date ownership and ownedSince)
       const horseDetails = await tx.horse.findMany({
         where: { tokenId: { in: tokenIds } },
-        include: { equipments: true },
+        include: {
+          equipments: true,
+          owner: { select: { careerfactor: true } },
+        },
         orderBy: { createdAt: 'desc' },
       });
 
-      return horseDetails.map(horse => ({
+      return horseDetails.map(({ owner, ...horse }) => ({
         ...horse,
         isDeposit: true,
+        horseCareerFactor: horse.careerfactor,
+        ownerCareerFactor: owner?.careerfactor ?? 1,
       }));
     });
   }
@@ -502,7 +507,15 @@ export class HorseService {
     return this.prisma.$transaction(async (tx) => {
       const user = await tx.user.findUnique({
         where: { wallet: ownerWallet },
-        select: { id: true, phorse: true, medals: true, totalPhorseEarned: true, lastRace: true },
+        select: {
+          id: true,
+          phorse: true,
+          medals: true,
+          totalPhorseEarned: true,
+          lastRace: true,
+          shards: true,
+          careerfactor: true,
+        },
       });
       if (!user) throw new NotFoundException('User not found');
 
@@ -515,6 +528,12 @@ export class HorseService {
       if (!horse) throw new NotFoundException('Horse not found');
       if (horse.ownerId !== user.id) throw new ForbiddenException('Not your horse');
       if (horse.status !== 'IDLE') throw new BadRequestException('Horse must be IDLE to start a race');
+
+      const shardCostFloat = 100 * Number(user.careerfactor ?? 1) * Number(horse.careerfactor ?? 1);
+      const shardCost = Math.ceil(shardCostFloat); // avoid fractional shards
+      if ((user.shards ?? 0) < shardCost) {
+        throw new BadRequestException(`Not enough SHARDS: need ${shardCost}, have ${user.shards ?? 0}`);
+      }
 
       const baseEnergy = globals['Energy Spent'] as number;
 
@@ -617,7 +636,7 @@ export class HorseService {
       const [updatedUser, updatedHorse] = await Promise.all([
         tx.user.update({
           where: { id: user.id },
-          data: { phorse: updatedPhorse, medals: updatedMedals, totalPhorseEarned: updatedTotalPhorseEarned, ...(user.lastRace ? {} : { lastRace: new Date() }) },
+          data: { phorse: updatedPhorse, medals: updatedMedals, totalPhorseEarned: updatedTotalPhorseEarned, shards: { decrement: shardCost }, ...(user.lastRace ? {} : { lastRace: new Date() }) },
           select: { phorse: true, medals: true },
         }),
         tx.horse.updateMany({
@@ -647,6 +666,7 @@ export class HorseService {
           phorseEarned: tokenReward,
           xpEarned: xpReward,
           position,                  // same `position` you already computed
+          shardSpent: shardCost,
         },
       });
 
@@ -764,6 +784,8 @@ export class HorseService {
           totalPhorseSpent: true,
           burnScore: true,
           lastRace: true,
+          shards: true,
+          careerfactor: true,
         },
       });
       if (!user) throw new NotFoundException('User not found');
@@ -780,6 +802,17 @@ export class HorseService {
       });
       if (horses.length !== tokenIds.length) {
         throw new NotFoundException('One or more horses not found');
+      }
+
+      const perHorseShardCost: Record<string, number> = {};
+      let totalShardCost = 0;
+      for (const h of horses) {
+        const c = Math.ceil(100 * Number(user.careerfactor ?? 1) * Number(h.careerfactor ?? 1));
+        perHorseShardCost[h.tokenId] = c;
+        totalShardCost += c;
+      }
+      if ((user.shards ?? 0) < totalShardCost) {
+        throw new BadRequestException(`Not enough SHARDS: need ${totalShardCost}, have ${user.shards ?? 0}`);
       }
 
       // Prepare accumulators
@@ -979,6 +1012,8 @@ export class HorseService {
           })
       );
 
+      const horseIdByToken = new Map(horses.map(h => [h.tokenId, h.id]));
+
       // 4) Batch all writes
       // Precompute per-horse energySpent so guards are correct
       const energySpentByToken: Record<string, number> = {};
@@ -1007,6 +1042,7 @@ export class HorseService {
             burnScore: user.burnScore + totalCost,
             medals: user.medals + rawResults.reduce((s, r) => s + r.medalReward, 0),
             totalPhorseEarned: user.totalPhorseEarned + rawResults.reduce((s, r) => s + r.tokenReward, 0),
+            shards: { decrement: totalShardCost },
             ...(user.lastRace ? {} : { lastRace: new Date() })
           }
         }),
@@ -1030,6 +1066,7 @@ export class HorseService {
             phorseEarned: r.tokenReward,
             xpEarned: r.xpReward,
             position: r.position,
+            shardSpent: perHorseShardCost[r.tokenId],
           })),
         }),
         // item drops
