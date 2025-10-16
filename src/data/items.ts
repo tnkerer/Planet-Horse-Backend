@@ -871,7 +871,7 @@ export const items = {
         "src": "manual",
         "description": "Instructions on how to raise a Red Wolf",
         "consumable": false,
-        "breakable": true,
+        "breakable": false,
         "uses": 1,
         "chainId": 24000,
         "trophy": false,
