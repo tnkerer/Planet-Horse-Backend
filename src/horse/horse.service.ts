@@ -592,7 +592,8 @@ export class HorseService {
       const newEnergy = horse.currentEnergy - energySpent;
       const denom = Math.log(totalStats) / Math.log(1.6);
       const hurtChance = Math.min(1, denom > 0 ? 1 / denom : 0);
-      const isHurt = Math.random() * totalModifier.hurtRate < hurtChance;
+      // const isHurt = Math.random() * totalModifier.hurtRate < hurtChance;
+      const isHurt = false;
 
       let finalStatus: 'IDLE' | 'SLEEP' | 'BRUISED' = 'IDLE';
       if (newEnergy < (baseEnergy - totalModifier.energySaved)) finalStatus = 'SLEEP';
@@ -906,7 +907,8 @@ export class HorseService {
         const newEnergy = horse.currentEnergy - energySpent;
         const denom = Math.log(totalStats) / Math.log(1.6);
         const hurtChance = Math.min(1, denom > 0 ? 1 / denom : 0);
-        const isHurt = Math.random() * mods.hurtRate < hurtChance;
+        // const isHurt = Math.random() * mods.hurtRate < hurtChance;
+        const isHurt = false;
         let finalStatus: 'IDLE' | 'SLEEP' | 'BRUISED' = 'IDLE';
         if (isHurt) finalStatus = 'BRUISED';
         else if (newEnergy < energySpent) finalStatus = 'SLEEP';
