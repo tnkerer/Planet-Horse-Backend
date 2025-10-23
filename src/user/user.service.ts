@@ -1295,28 +1295,8 @@ export class UserService {
             throw new NotFoundException('User not found');
         }
 
-        // 2) Get oracle and compute per-chest PHORSE price (ceil)
-        const oracle = await this.getPhorseUsdOracle(); // may throw 503 (ServiceUnavailable) by design
-
-        // Safely parse something like "0.01234", "$0.01234", "0,01234", etc.
-        const parsedUsd = Number(String(oracle.usdPriceFormatted).replace(/[^0-9.]/g, ''));
-        if (!Number.isFinite(parsedUsd) || parsedUsd <= 0) {
-            throw new ServiceUnavailableException('Oracle returned an invalid USD price for PHORSE');
-        }
-
-        // Choose USD price from items.ts (referral discount applies in USD)
-        const usdPerChest = user.referredById ? def.discountedPrice : def.price;
-        if (!Number.isFinite(usdPerChest) || usdPerChest <= 0) {
-            throw new BadRequestException('Invalid chest USD price configuration');
-        }
-
-        // Convert USD -> PHORSE and round UP; must be an integer Number
-        const phorsePerChest = Math.ceil(usdPerChest / parsedUsd);
-        if (!Number.isInteger(phorsePerChest) || phorsePerChest < 1) {
-            throw new ServiceUnavailableException('Could not derive a valid PHORSE price from oracle');
-        }
-
-        const totalCost = phorsePerChest * chestQuantity;
+        const price = user.referredById ? def.discountedPrice : def.price;
+        const totalCost = price * chestQuantity;
 
         // 3) Run everything in one Prisma transaction
         return this.prisma.$transaction(async (tx) => {
@@ -1367,7 +1347,7 @@ export class UserService {
                     owner: { connect: { id: u.id } },
                     type: TransactionType.ITEM,
                     status: TransactionStatus.COMPLETED,
-                    note: `Bought ${chestQuantity} chest(s) @ ${phorsePerChest} PHORSE/chest (oracle ${parsedUsd} USD/PHORSE)`,
+                    note: `Bought ${chestQuantity} chest(s) @ ${price} PHORSE/chest`,
                     value: totalCost,
                 },
             });

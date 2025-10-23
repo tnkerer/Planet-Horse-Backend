@@ -1595,13 +1595,13 @@ export const chestDrops = {
 export const chests = {
     1: {
         "paused": true,
-        "price": 0.5,
-        "discountedPrice": 0.45
+        "price": 1500,
+        "discountedPrice": 1350
     },
     2: {
         "paused": false,
-        "price": 1,
-        "discountedPrice": 0.9
+        "price": 3000,
+        "discountedPrice": 2700
     }
 }
 
