@@ -8,7 +8,7 @@ export const items = {
         "uses": 1,
         "chainId": 999,
         "chainSrc": "https://ipfs.io/ipfs/bafybeiafovans3zgtmpsfe2q7amtv3xiznsrncwfu7pubd3hfjgparxbky",
-        "shards": 400
+        "shards": 1000
     },
     "Hay": {
         "name": "Hay",
