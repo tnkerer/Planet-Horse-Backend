@@ -35,7 +35,10 @@ import { StableModule } from './stable/stable.module';
     StableModule
   ],
   controllers: [AppController],
-  providers: [AppService, ReferralXpCronService],
+  providers: [
+    AppService, 
+    // ReferralXpCronService
+    ],
 })
 
 export class AppModule implements NestModule {
