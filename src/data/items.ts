@@ -1,4 +1,14 @@
 export const items = {
+    "PHORSE Bag": {
+        "name": "PHORSE Bag",
+        "src": "phorse_bag",
+        "breakable": true,
+        "consumable": true,
+        "uses": 1,
+        "chainId": 998,
+        "chainSrc": "https://ipfs.io/ipfs/bafybeic5m27pbu34swtkahqptfycaaf76paf5liav5w3cyozqohwal2rla",
+        "shards" : 1
+    },
     "Medal Bag": {
         "name": "Medal Bag",
         "src": "medal_bag",
@@ -8,7 +18,7 @@ export const items = {
         "uses": 1,
         "chainId": 999,
         "chainSrc": "https://ipfs.io/ipfs/bafybeiafovans3zgtmpsfe2q7amtv3xiznsrncwfu7pubd3hfjgparxbky",
-        "shards": 1000
+        "shards": 1500
     },
     "Hay": {
         "name": "Hay",
@@ -22,7 +32,7 @@ export const items = {
         },
         "chainId": 1000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeiaqn6tk7vp3ldgpvvqtmg2eozqt5pntcrvb4pjqfdc2aoyiqwldny',
-        "shards": 20
+        "shards": 50
     },
     "Big Hay Bale": {
         "name": "Big Hay Bale",
@@ -36,7 +46,7 @@ export const items = {
         },
         "chainId": 2000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeieyjcwjc5lhzh2gelbsogmnfeof4bc63aghs444epbczycol26r5a',
-        "shards": 40
+        "shards": 80
     },
     "Rice Bowl": {
         "name": "Rice Bowl",
@@ -50,7 +60,7 @@ export const items = {
         },
         "chainId": 14000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeievbvn5xoa7m36h67i4ijufqz3xtq4cdhsy6srbahjjsgy33ftkra',
-        "shards": 10
+        "shards": 40
     },
     "Rice Sack": {
         "name": "Rice Sack",
@@ -72,7 +82,7 @@ export const items = {
         "uses": 6,
         "chainId": 3000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeieqp44wwiosdqu5pbddx4fzevouedhtzqsilq4d47adr3bx4grr4m',
-        "shards": 20
+        "shards": 80
     },
     "Superior XP Potion": {
         "name": "Superior XP Potion",
@@ -83,7 +93,7 @@ export const items = {
         "uses": 4,
         "chainId": 4000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeiagu4dv4sb43czvikzd5b5qeul3ronnqgbitf2vrlxxmurkj5tjli',
-        "shards": 40
+        "shards": 120
     },
     "Common XP Potion": {
         "name": "Common XP Potion",
@@ -94,7 +104,7 @@ export const items = {
         "uses": 4,
         "chainId": 5000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeibun6mwekad6vas2gkag6tmwlvus2pbl3lal5mytyzjjbhwk4ho6e',
-        "shards": 20
+        "shards": 80
     },
     "Common Horseshoe": {
         "name": "Common Horseshoe",
@@ -105,7 +115,7 @@ export const items = {
         "uses": 6,
         "chainId": 6000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeicru36tgocx26vndrml2mhxwghzqkgyljuxp5fnnvidwchdtclwai',
-        "shards": 20
+        "shards": 80
     },
     "Pumpers": {
         "name": "Pumpers",
@@ -116,7 +126,7 @@ export const items = {
         "uses": 5,
         "chainId": 7000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeiandgvyjf4t7fg65vc4dzfcbro5cmrn7bt4oo5javi5x5jdtfnj5i',
-        "shards": 30
+        "shards": 80
     },
     "Scrap Metal": {
         "name": "Scrap Metal",
@@ -150,7 +160,7 @@ export const items = {
         "uses": 1,
         "chainId": 10000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeibv5xrrvpblewknapabtevnm33poi2i32b3ypuz4qh7xz2dr4kpd4',
-        "shards": 5000
+        "shards": 8000
     },
     "Rollie the Bunny": {
         "name": "Rollie the Bunny",
@@ -174,7 +184,7 @@ export const items = {
         "uses": 1,
         "chainId": 10002,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeih5qlajvf4wqbmxvhcfewnkgizd4wrjdbi7y7chmcv4xusgwz6zvy',
-        "shards": 5000
+        "shards": 8000
     },
     "Ronke Farmer Trophy": {
         "name": "Ronke Farmer Trophy",
@@ -198,7 +208,7 @@ export const items = {
         "uses": 1,
         "chainId": 10004,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeifl7o34ku3fwrbuiwunfo6fyrumeoubr3vkm3eyjzfgdrv5ervfqy',
-        "shards": 300
+        "shards": 800
     },
     "BoostRexGQ Trophy": {
         "name": "BoostRexGQ Trophy",
@@ -210,7 +220,7 @@ export const items = {
         "uses": 1,
         "chainId": 10005,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeibov65x6chyri2zfpax3si2le27bag3rpqq63veu62pydvgkscejy',
-        "shards": 4000
+        "shards": 6000
     },
     "Champion Saddle Pad": {
         "name": "Champion Saddle Pad",
@@ -221,7 +231,7 @@ export const items = {
         "uses": 1,
         "chainId": 11000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeidvkvfeequ3z7vvmbsf76ym5jupjrtongygv7d6achulo5zeynjgy',
-        "shards": 25
+        "shards": 60
     },
     "Champion Saddle Pad +1": {
         "name": "Champion Saddle Pad +1",
@@ -232,7 +242,7 @@ export const items = {
         "uses": 1,
         "chainId": 11001,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeidvkvfeequ3z7vvmbsf76ym5jupjrtongygv7d6achulo5zeynjgy',
-        "shards": 50
+        "shards": 120
     },
     "Champion Saddle Pad +2": {
         "name": "Champion Saddle Pad +2",
@@ -243,7 +253,7 @@ export const items = {
         "uses": 1,
         "chainId": 11002,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeidvkvfeequ3z7vvmbsf76ym5jupjrtongygv7d6achulo5zeynjgy',
-        "shards": 75
+        "shards": 180
     },
     "Champion Saddle Pad +3": {
         "name": "Champion Saddle Pad +3",
@@ -254,7 +264,7 @@ export const items = {
         "uses": 1,
         "chainId": 11003,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeido3asg4hxbdildw5sgor2xy4jnxyh5ozpxophlmtewgwhjp7jr4e',
-        "shards": 100
+        "shards": 240
     },
     "Champion Saddle Pad +4": {
         "name": "Champion Saddle Pad +4",
@@ -265,7 +275,7 @@ export const items = {
         "uses": 1,
         "chainId": 11004,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeido3asg4hxbdildw5sgor2xy4jnxyh5ozpxophlmtewgwhjp7jr4e',
-        "shards": 125
+        "shards": 300
     },
     "Champion Saddle Pad +5": {
         "name": "Champion Saddle Pad +5",
@@ -276,7 +286,7 @@ export const items = {
         "uses": 1,
         "chainId": 11005,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeido3asg4hxbdildw5sgor2xy4jnxyh5ozpxophlmtewgwhjp7jr4e',
-        "shards": 150
+        "shards": 360
     },
     "Champion Saddle Pad +6": {
         "name": "Champion Saddle Pad +6",
@@ -287,7 +297,7 @@ export const items = {
         "uses": 1,
         "chainId": 11006,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeifjthdzte2teiidizsgffybcevqzbxp6x5stkyxlnzwhqclylwpk4',
-        "shards": 300
+        "shards": 420
     },
     "Champion Saddle Pad +7": {
         "name": "Champion Saddle Pad +7",
@@ -298,7 +308,7 @@ export const items = {
         "uses": 1,
         "chainId": 11007,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeifjthdzte2teiidizsgffybcevqzbxp6x5stkyxlnzwhqclylwpk4',
-        "shards": 450
+        "shards": 480
     },
     "Champion Saddle Pad +8": {
         "name": "Champion Saddle Pad +8",
@@ -397,7 +407,7 @@ export const items = {
         "uses": 1,
         "chainId": 12000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeid2grqx6np2zamaxnu3kkqz53syene7hp6u7sx62okqwjws5ffine',
-        "shards": 25
+        "shards": 60
     },
     "Champion Bridle +1": {
         "name": "Champion Bridle +1",
@@ -408,7 +418,7 @@ export const items = {
         "uses": 1,
         "chainId": 12001,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeid2grqx6np2zamaxnu3kkqz53syene7hp6u7sx62okqwjws5ffine',
-        "shards": 50
+        "shards": 120
     },
     "Champion Bridle +2": {
         "name": "Champion Bridle +2",
@@ -419,7 +429,7 @@ export const items = {
         "uses": 1,
         "chainId": 12002,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeid2grqx6np2zamaxnu3kkqz53syene7hp6u7sx62okqwjws5ffine',
-        "shards": 75
+        "shards": 180
     },
     "Champion Bridle +3": {
         "name": "Champion Bridle +3",
@@ -430,7 +440,7 @@ export const items = {
         "uses": 1,
         "chainId": 12003,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeicpheju2m3zoapkiefxqmez5obpjwcaw4grvo5geinltryrlq2lea',
-        "shards": 100
+        "shards": 240
     },
     "Champion Bridle +4": {
         "name": "Champion Bridle +4",
@@ -441,7 +451,7 @@ export const items = {
         "uses": 1,
         "chainId": 12004,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeicpheju2m3zoapkiefxqmez5obpjwcaw4grvo5geinltryrlq2lea',
-        "shards": 125
+        "shards": 300
     },
     "Champion Bridle +5": {
         "name": "Champion Bridle +5",
@@ -452,7 +462,7 @@ export const items = {
         "uses": 1,
         "chainId": 12005,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeicpheju2m3zoapkiefxqmez5obpjwcaw4grvo5geinltryrlq2lea',
-        "shards": 150
+        "shards": 360
     },
     "Champion Bridle +6": {
         "name": "Champion Bridle +6",
@@ -463,7 +473,7 @@ export const items = {
         "uses": 1,
         "chainId": 12006,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeigj6euuhnn6msmrx3ypk7jpqsrem4uqpj5wfra5kexapqk3mrcqky',
-        "shards": 300
+        "shards": 420
     },
     "Champion Bridle +7": {
         "name": "Champion Bridle +7",
@@ -474,7 +484,7 @@ export const items = {
         "uses": 1,
         "chainId": 12007,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeigj6euuhnn6msmrx3ypk7jpqsrem4uqpj5wfra5kexapqk3mrcqky',
-        "shards": 450
+        "shards": 480
     },
     "Champion Bridle +8": {
         "name": "Champion Bridle +8",
@@ -573,7 +583,7 @@ export const items = {
         "uses": 1,
         "chainId": 13000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeidx36wrv6rfkvgl6yymjeoezhwaky6gctwxj44a7tb4tncu73pzdu',
-        "shards": 25
+        "shards": 60
     },
     "Champion Stirrups +1": {
         "name": "Champion Stirrups +1",
@@ -584,7 +594,7 @@ export const items = {
         "uses": 1,
         "chainId": 13001,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeidx36wrv6rfkvgl6yymjeoezhwaky6gctwxj44a7tb4tncu73pzdu',
-        "shards": 50
+        "shards": 120
     },
     "Champion Stirrups +2": {
         "name": "Champion Stirrups +2",
@@ -595,7 +605,7 @@ export const items = {
         "uses": 1,
         "chainId": 13002,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeidx36wrv6rfkvgl6yymjeoezhwaky6gctwxj44a7tb4tncu73pzdu',
-        "shards": 75
+        "shards": 180
     },
     "Champion Stirrups +3": {
         "name": "Champion Stirrups +3",
@@ -606,7 +616,7 @@ export const items = {
         "uses": 1,
         "chainId": 13003,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeiaoepfr5ase2hfiw7jebasuykxk4rh52sue7eolgcg2lt6ahl7xc4',
-        "shards": 100
+        "shards": 240
     },
     "Champion Stirrups +4": {
         "name": "Champion Stirrups +4",
@@ -617,7 +627,7 @@ export const items = {
         "uses": 1,
         "chainId": 13004,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeiaoepfr5ase2hfiw7jebasuykxk4rh52sue7eolgcg2lt6ahl7xc4',
-        "shards": 125
+        "shards": 300
     },
     "Champion Stirrups +5": {
         "name": "Champion Stirrups +5",
@@ -628,7 +638,7 @@ export const items = {
         "uses": 1,
         "chainId": 13005,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeiaoepfr5ase2hfiw7jebasuykxk4rh52sue7eolgcg2lt6ahl7xc4',
-        "shards": 150
+        "shards": 360
     },
     "Champion Stirrups +6": {
         "name": "Champion Stirrups +6",
@@ -639,7 +649,7 @@ export const items = {
         "uses": 1,
         "chainId": 13006,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeiekuhdhytkvdupozpzki2cqgzaq2g7rlut532raqetvovboxmlh3m',
-        "shards": 300
+        "shards": 420
     },
     "Champion Stirrups +7": {
         "name": "Champion Stirrups +7",
@@ -650,7 +660,7 @@ export const items = {
         "uses": 1,
         "chainId": 13007,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeiekuhdhytkvdupozpzki2cqgzaq2g7rlut532raqetvovboxmlh3m',
-        "shards": 450
+        "shards": 480
     },
     "Champion Stirrups +8": {
         "name": "Champion Stirrups +8",
@@ -749,7 +759,7 @@ export const items = {
         "uses": 10,
         "chainId": 15000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeichdccot4b2etjafxa46v5yvqmnas7ebk4wvzta2qonj2efkhszta',
-        "shards": 50
+        "shards": 250
     },
     "Clover": {
         "name": "Clover",
@@ -760,7 +770,7 @@ export const items = {
         "uses": 1,
         "chainId": 16000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeihjpdcjq5h7out7k7jp53w22c7qvoz3ak7fjfw2jrjiepjy2mqrbi',
-        "shards": 150
+        "shards": 400
     },
     "Power Genes": {
         "name": "Power Genes",
@@ -771,7 +781,7 @@ export const items = {
         "uses": 1,
         "chainId": 17000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeigkd3wc5xhkl4yaikak5olr5yoevfqowru24i57vd5cxwxrvykpge',
-        "shards": 400
+        "shards": 750
     },
     "Speed Genes": {
         "name": "Speed Genes",
@@ -782,7 +792,7 @@ export const items = {
         "uses": 1,
         "chainId": 17001,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeibv6miu7crkdn4tf6aodnn53icitcmsr7hf3quavgakks7io47kuy',
-        "shards": 400
+        "shards": 750
     },
     "Sprint Genes": {
         "name": "Sprint Genes",
@@ -793,7 +803,7 @@ export const items = {
         "uses": 1,
         "chainId": 17002,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeidsmjqtpwhwsqpjvp77jj772duoaauqffyajvbd4yr4f5p2xy4fmm',
-        "shards": 400
+        "shards": 750
     },
     "Baxie Trophy": {
         "name": "Baxie Trophy",
@@ -805,7 +815,7 @@ export const items = {
         "chainId": 18000,
         "trophy": true,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeiecbvnbcn7awzuegyi3zjz7zhijgpctbv6m4j4yg6el5j4epnvjie',
-        "shards": 4000
+        "shards": 8000
     },
     "Level Up Ticket": {
         "name": "Level Up Ticket",
@@ -816,7 +826,7 @@ export const items = {
         "uses": 1,
         "chainId": 19000,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeid75oc3aoh74f6bznorlakyzoiwt77oyyoqungwaczp626js4jgfa',
-        "shards": 1500
+        "shards": 2500
     },
     "Wolfie Trophy": {
         "name": "Wolfie Trophy",
@@ -876,7 +886,7 @@ export const items = {
         "chainId": 24000,
         "trophy": false,
         "chainSrc": 'https://ipfs.io/ipfs/bafybeievvj4rs5rlkcf4yc47ztq7zikzuwajycecjhl2qr2pkx4ry7cziq',
-        "shards": 2500
+        "shards": 3500
     }
 }
 
@@ -1595,13 +1605,13 @@ export const chestDrops = {
 export const chests = {
     1: {
         "paused": true,
-        "price": 1500,
-        "discountedPrice": 1350
+        "price": 500,
+        "discountedPrice": 450
     },
     2: {
         "paused": false,
-        "price": 3000,
-        "discountedPrice": 2700
+        "price": 1000,
+        "discountedPrice": 900
     }
 }
 

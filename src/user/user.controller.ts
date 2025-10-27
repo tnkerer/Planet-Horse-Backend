@@ -151,7 +151,7 @@ export class UserController {
   * POST /user/withdraw
   * Body: { amount: number }
   */
-  @Throttle({ default: { limit: 25, ttl: 60_000 } })
+  /* @Throttle({ default: { limit: 25, ttl: 60_000 } })
   @Post('withdraw')
   async withdraw(
     @Request() req,
@@ -176,7 +176,7 @@ export class UserController {
 
     // 3) Delegate to the service
     return this.users.phorseWithdraw(req.user.wallet, amount);
-  }
+  } */
 
   @Throttle({ default: { limit: 25, ttl: 60_000 } })
   @Post('withdraw/wron')
@@ -299,22 +299,32 @@ export class UserController {
     return this.users.setReferredBy(wallet, refCode);
   }
 
+  // user.controller.ts
+
   /**
   * POST /user/items/open-bag
-  * Optional: Idempotency-Key header or { idempotencyKey?: string } in body
-  * Returns: { added: number; newMedals: number; remainingBags: number }
+  * Body: { name?: 'Medal Bag' | 'PHORSE Bag', idempotencyKey?: string }
+  * Optional: Idempotency-Key header or body.idempotencyKey
+  * Returns (back-compat):
+  *   Medal Bag  -> { added, newMedals,  remainingBags }
+  *   PHORSE Bag -> { added, newPhorse,  remainingBags }
   */
   @Throttle({ default: { limit: 15, ttl: 60_000 } })
   @Post('items/open-bag')
-  async openMedalBag(
+  async openBag(
     @Request() req,
-    @Body() body: { idempotencyKey?: string } = {},
+    @Body() body: { name?: string; idempotencyKey?: string } = {}, // ← CHANGED
   ) {
     try {
       const wallet = req.user?.wallet;
       if (!wallet || typeof wallet !== 'string') {
         throw new BadRequestException('Invalid authenticated wallet');
       }
+
+      const name =
+        body && typeof body.name === 'string' && body.name.trim().length
+          ? body.name.trim()
+          : 'Medal Bag'; // ← default keeps old behavior
 
       const bodyKey =
         body && typeof body.idempotencyKey === 'string'
@@ -327,10 +337,10 @@ export class UserController {
         throw new BadRequestException('idempotencyKey too long (max 128 chars)');
       }
 
-      const result = await this.users.openBag(wallet, idempotencyKey);
+      // ← CHANGED: pass name through
+      const result = await this.users.openBag(wallet, name, idempotencyKey);
       return result;
     } catch (error) {
-      // Preserve known 4xx from service; coerce unknowns to 400 to avoid 500s
       if (
         error?.status &&
         typeof error.status === 'number' &&
@@ -339,12 +349,12 @@ export class UserController {
       ) {
         throw error;
       }
-      // Minimal log, avoid heavy stringification
       // eslint-disable-next-line no-console
-      console.error('openMedalBag unexpected error');
-      throw new BadRequestException('Could not open Medal Bag');
+      console.error('openBag unexpected error');
+      throw new BadRequestException('Could not open bag');
     }
   }
+
 
   @Post('items/craft')
   async craft(

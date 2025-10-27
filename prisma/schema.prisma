@@ -337,6 +337,7 @@ model RaceHistory {
   id           String   @id @default(uuid())
   createdAt    DateTime @default(now())
   phorseEarned Float
+  wronEarned   Float @default(0)
   xpEarned     Int
   position     Int
   horse        Horse    @relation(fields: [horseId], references: [id])
@@ -458,6 +459,14 @@ model StableListing {
   @@index([isOpen])
   @@index([currency])
   @@index([tokenAddress])
+}
+
+model RewardBank {
+  id        String   @id                      // e.g. "WRON"
+  token     String   @unique                  // e.g. "WRON"
+  available Decimal  @db.Decimal(36, 18)      // how much WRON is left to distribute
+  version   Int      @default(0)              // optimistic-lock helper (optional)
+  updatedAt DateTime @updatedAt
 }
 
 /// A 1-week lease with minimal escrow info.

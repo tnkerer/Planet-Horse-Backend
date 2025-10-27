@@ -1,9 +1,15 @@
 export const itemCraftReq = {
     "Medal Bag" : {
-        "phorse" : 5000,
+        "phorse" : 2500,
         "medals" : 50,
         "Scrap Metal" : 5,
         "Scrap Leather" : 5
+    },
+    "PHORSE Bag" : {
+        "phorse" : 10000,
+        "medals" : 10,
+        "Scrap Metal" : 1,
+        "Scrap Leather" : 1
     },
     "Red Wolfie Trophy" : {
         "phorse" : 100000,

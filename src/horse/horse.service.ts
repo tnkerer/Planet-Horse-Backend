@@ -103,6 +103,64 @@ function samplePosition(dist: number[], rng: () => number = Math.random): number
   return 6; // fallback
 }
 
+// ── Position-aware random reward roller (replacement) ──────────────────────────
+function rollRewards(
+  position: number,
+  rewardsCfg: Record<string, readonly [number, number]>
+) {
+  // XP base stays from your table, unchanged
+  const xpBase = rewardsCfg[position.toString()][0];
+
+  // Clamp pos into [1..10] defensively
+  const pos = Math.min(10, Math.max(1, position));
+
+  // Linear helpers: pos=1 → hi, pos=10 → lo
+  const lerp = (hi: number, lo: number, t: number) => hi + (lo - hi) * t; // t in [0..1]
+  const t = (pos - 1) / 9; // 0 at P1, 1 at P10
+
+  // ---- Currency selection bias by position -----------------------------------
+  // Higher chance of WRON in better positions, much lower in worse positions.
+  // e.g., ~10% at P1 down to ~1% at P10 (tweak freely)
+  const wronProb = lerp(0.03, 0.002, t); // position-weighted currency split
+
+  // ---- PHORSE magnitude depends strongly on position -------------------------
+  // Top places can roll much higher PHORSE bases; back of the pack gets small rolls.
+  // Keep bounds conservative since later multipliers can be huge.
+  const phorseMin = lerp(20, 5, t);     // P1≈20  →  P10≈5
+  const phorseMax = lerp(200, 40, t);   // P1≈200 →  P10≈40
+
+  // ---- WRON magnitude is small and capped; only chance changes with position -
+  const wronMin = 0.1;
+  const wronMax = 4;
+
+  // ---- Jackpot probs also position-weighted (still VERY HARD) ----------------
+  // Slightly easier at the top, still very rare overall.
+  const phorseJackpotProb = lerp(0.004, 0.0005, t);
+  const wronJackpotProb = lerp(0.002, 0.0003, t); // 0.2% → 0.03%
+
+  const rollWithJackpot = (min: number, max: number, jackpotProb: number) => {
+    const jackpot = Math.random() < jackpotProb;
+    let reward = max;
+    if (jackpot) return { reward, jackpot }; // JACKPOT
+    reward = parseFloat((min + Math.random() * (max - min)).toFixed(2));
+    return { reward, jackpot };
+  };
+
+  // Decide which currency this run pays out (mutually exclusive)
+  const rollWRON = Math.random() < wronProb;
+
+  if (rollWRON) {
+    const { reward, jackpot } = rollWithJackpot(wronMin, wronMax, wronJackpotProb);
+    const wronBase = reward;
+    return { xpBase, phorseBase: 0, wronBase, jackpot };
+  } else {
+    const { reward, jackpot } = rollWithJackpot(phorseMin, phorseMax, phorseJackpotProb);
+    const phorseBase = reward;
+    return { xpBase, phorseBase, wronBase: 0, jackpot };
+  }
+}
+
+
 @Injectable()
 export class HorseService {
   constructor(
@@ -325,9 +383,9 @@ export class HorseService {
     const maxG = rarityInfo['Growth Max'];
     const rollGrowth = () => Math.random() * (maxG - minG) + minG;
 
-    const incPower = rollGrowth() * 2;
-    const incSprint = rollGrowth() * 2;
-    const incSpeed = rollGrowth() * 2;
+    const incPower = rollGrowth() * 1;
+    const incSprint = rollGrowth() * 1;
+    const incSpeed = rollGrowth() * 1;
 
     const newLevel = horse.level + 1;
     const maxLevelForRarity = levelLimits[horse.rarity];
@@ -510,6 +568,7 @@ export class HorseService {
         select: {
           id: true,
           phorse: true,
+          wron: true,
           medals: true,
           totalPhorseEarned: true,
           lastRace: true,
@@ -577,14 +636,29 @@ export class HorseService {
 
       const hasJinDaRat = horse.equipments?.some(it => it.name === 'JinDaRat');
 
-      // rewards follow from position as you already do
       const rewardsCfg = globals['Rewards'] as Record<string, readonly [number, number]>;
-      const [xpBase, tokenBase] = rewardsCfg[position.toString()];
+      // rewards follow from position as you already do
+      const { xpBase, phorseBase, wronBase, jackpot } = rollRewards(position, rewardsCfg);
 
       const baseXpReward = Math.floor(xpBase * baseXpMod * (globals['Experience Multiplier'] as number));
       const xpReward = Math.floor(baseXpReward * totalModifier.xpMultiplier);
-      const rawToken = parseFloat((tokenBase * baseMod * Number(totalModifier.phorseMultiplier)).toFixed(2));
-      const tokenReward = (hasJinDaRat && position > 5) ? 0 : rawToken;
+
+      // PHORSE path (keeps your existing multipliers)
+      const rawPhorse = parseFloat((Math.max(phorseBase * baseMod, phorseBase) * Number(totalModifier.phorseMultiplier)).toFixed(2));
+      const tokenReward = (hasJinDaRat && position > 5) ? 0 : rawPhorse; // ← your existing "phorse" reward
+
+      // Optional: capture WRON separately (small & capped; no multipliers applied here)
+      const wronTemptative = parseFloat(Math.max((wronBase * (baseMod / 8)), wronBase).toFixed(2)); // keep as-is for now
+
+      let wronReward = 0;
+      if (wronTemptative > 0) {
+        const { allocateWron } = await import('../utils/wron');  // or a top import
+        const { granted } = await allocateWron(tx, wronTemptative);
+        wronReward = granted;
+      }
+
+      // console.log({ tokenReward, wronReward, jackpot })
+
       const medalReward = position === 1 ? 1 :
         position === 2 ? 1 :
           position === 3 ? 1 : 0;
@@ -592,8 +666,7 @@ export class HorseService {
       const newEnergy = horse.currentEnergy - energySpent;
       const denom = Math.log(totalStats) / Math.log(1.6);
       const hurtChance = Math.min(1, denom > 0 ? 1 / denom : 0);
-      // const isHurt = Math.random() * totalModifier.hurtRate < hurtChance;
-      const isHurt = false;
+      const isHurt = Math.random() * totalModifier.hurtRate < hurtChance;
 
       let finalStatus: 'IDLE' | 'SLEEP' | 'BRUISED' = 'IDLE';
       if (newEnergy < (baseEnergy - totalModifier.energySaved)) finalStatus = 'SLEEP';
@@ -607,6 +680,7 @@ export class HorseService {
       const updatedExp = horse.exp + xpReward;
       const updatedPhorse = user.phorse + tokenReward;
       const updatedMedals = user.medals + medalReward;
+      const updatedWron = user.wron + wronReward;
       const updatedTotalPhorseEarned = user.totalPhorseEarned + tokenReward;
 
       // Determine “upgradable” only if we haven’t already hit the cap:
@@ -637,7 +711,7 @@ export class HorseService {
       const [updatedUser, updatedHorse] = await Promise.all([
         tx.user.update({
           where: { id: user.id },
-          data: { phorse: updatedPhorse, medals: updatedMedals, totalPhorseEarned: updatedTotalPhorseEarned, shards: { decrement: shardCost }, ...(user.lastRace ? {} : { lastRace: new Date() }) },
+          data: { phorse: updatedPhorse, wron: updatedWron, medals: updatedMedals, totalPhorseEarned: updatedTotalPhorseEarned, shards: { decrement: shardCost }, ...(user.lastRace ? {} : { lastRace: new Date() }) },
           select: { phorse: true, medals: true },
         }),
         tx.horse.updateMany({
@@ -665,6 +739,7 @@ export class HorseService {
         data: {
           horseId: horse.id,
           phorseEarned: tokenReward,
+          wronEarned: wronReward,
           xpEarned: xpReward,
           position,                  // same `position` you already computed
           shardSpent: shardCost,
@@ -747,6 +822,8 @@ export class HorseService {
         xpReward,
         tokenReward,
         medalReward,
+        wronReward,
+        jackpot,
         position,
         finalStatus,
         droppedItems,
@@ -780,6 +857,7 @@ export class HorseService {
         select: {
           id: true,
           phorse: true,
+          wron: true,
           medals: true,
           totalPhorseEarned: true,
           totalPhorseSpent: true,
@@ -790,12 +868,19 @@ export class HorseService {
         },
       });
       if (!user) throw new NotFoundException('User not found');
-      const costPerRace = 50;
+      // NEW: check if user has a Stable
+      const hasStable = await tx.stable.findFirst({
+        where: { userId: user.id },
+        select: { id: true },
+      });
+
+      // If the user has any Stable, PHORSE cost per race is 0
+      const costPerRace = hasStable ? 0 : 50;
       const totalCost = costPerRace * tokenIds.length;
-      if (user.phorse < totalCost) {
+
+      if (totalCost > 0 && user.phorse < totalCost) {
         throw new BadRequestException('Not enough PHORSE to pay for all races');
       }
-
       // 2) Load horses & equipments
       const horses = await tx.horse.findMany({
         where: { tokenId: { in: tokenIds } },
@@ -821,6 +906,7 @@ export class HorseService {
         tokenId: string;
         xpReward: number;
         tokenReward: number;
+        wronReward: number;
         medalReward: number;
         position: number;
         finalStatus: 'IDLE' | 'SLEEP' | 'BRUISED';
@@ -894,11 +980,26 @@ export class HorseService {
 
         const hasJinDaRat = horse.equipments?.some(it => it.name === 'JinDaRat');
 
-        const [xpBase, tokBase] = rewardsCfg[position.toString()];
+        const { xpBase, phorseBase, wronBase, jackpot } = rollRewards(position, rewardsCfg);
         const baseXp = Math.floor(xpBase * baseXpMod * xpMultGlobal);
         const xpReward = Math.floor(baseXp * mods.xpMultiplier);
-        const rawToken = parseFloat((tokBase * baseMod * Number(mods.phorseMultiplier)).toFixed(2));
-        const tokenReward = (hasJinDaRat && position > 5) ? 0 : rawToken;
+
+        // PHORSE path (same multipliers)
+        const rawPhorse = parseFloat((Math.max(phorseBase * baseMod, phorseBase) * Number(mods.phorseMultiplier)).toFixed(2));
+        const tokenReward = (hasJinDaRat && position > 5) ? 0 : rawPhorse;
+
+        // Optional: keep WRON separate for now
+        const wronTemptative = parseFloat(Math.max((wronBase * (baseMod / 8)), wronBase).toFixed(2));
+
+        let wronReward = 0;
+        if (wronTemptative > 0) {
+          const { allocateWron } = await import('../utils/wron');  // or a top import
+          const { granted } = await allocateWron(tx, wronTemptative);
+          wronReward = granted;
+        }
+
+        // console.log({ tokenReward, wronReward, jackpot })
+
         const medalReward = position === 1 ? 1 :
           position === 2 ? 1 :
             position === 3 ? 1 : 0;
@@ -907,8 +1008,7 @@ export class HorseService {
         const newEnergy = horse.currentEnergy - energySpent;
         const denom = Math.log(totalStats) / Math.log(1.6);
         const hurtChance = Math.min(1, denom > 0 ? 1 / denom : 0);
-        // const isHurt = Math.random() * mods.hurtRate < hurtChance;
-        const isHurt = false;
+        const isHurt = Math.random() * mods.hurtRate < hurtChance;
         let finalStatus: 'IDLE' | 'SLEEP' | 'BRUISED' = 'IDLE';
         if (isHurt) finalStatus = 'BRUISED';
         else if (newEnergy < energySpent) finalStatus = 'SLEEP';
@@ -926,6 +1026,7 @@ export class HorseService {
           tokenId: horse.tokenId,
           xpReward,
           tokenReward,
+          wronReward,
           medalReward,
           position,
           finalStatus,
@@ -1040,6 +1141,7 @@ export class HorseService {
           where: { id: user.id },
           data: {
             phorse: user.phorse + rawResults.reduce((s, r) => s + r.tokenReward, 0) - totalCost,
+            wron: user.wron + rawResults.reduce((s, r) => s + r.wronReward, 0),
             totalPhorseSpent: user.totalPhorseSpent + totalCost,
             burnScore: user.burnScore + totalCost,
             medals: user.medals + rawResults.reduce((s, r) => s + r.medalReward, 0),
@@ -1066,6 +1168,7 @@ export class HorseService {
           data: rawResults.map(r => ({
             horseId: horses.find(h => h.tokenId === r.tokenId)!.id,
             phorseEarned: r.tokenReward,
+            wronEarned: r.wronReward,
             xpEarned: r.xpReward,
             position: r.position,
             shardSpent: perHorseShardCost[r.tokenId],
@@ -1090,6 +1193,7 @@ export class HorseService {
         tokenId: r.tokenId,
         xpReward: r.xpReward,
         tokenReward: r.tokenReward,
+        wronReward: r.wronReward,
         medalReward: r.medalReward,
         position: r.position,
         finalStatus: r.finalStatus,

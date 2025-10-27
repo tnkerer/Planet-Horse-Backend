@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "RaceHistory" ADD COLUMN     "wronEarned" DOUBLE PRECISION NOT NULL DEFAULT 0;

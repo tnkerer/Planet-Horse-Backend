@@ -1095,68 +1095,62 @@ export class UserService {
             throw new BadRequestException('Use two distinct horses');
         }
 
-        // Fetch both horses in a single roundtrip
+        // Fetch both horses
         const horses = await this.prisma.horse.findMany({
             where: { tokenId: { in: [horseIdA, horseIdB] } },
             select: { id: true, rarity: true, currentBreeds: true, gen: true },
         });
 
         if (horses.length !== 2) {
-            const foundTokenIds = new Set(horses.map(h => h.id));
-            const missing = [horseIdA, horseIdB].filter(id => !foundTokenIds.has(id));
+            const found = new Set(horses.map(h => h.id));
+            const missing = [horseIdA, horseIdB].filter(id => !found.has(id));
             throw new NotFoundException(`Horse(s) not found: ${missing.join(', ')}`);
         }
 
-        // Normalize rarities & compute the lowest rarity (for base USD)
+        // Lowest rarity determines base USD table
         const r1 = this.normalizeRarity(horses[0].rarity);
         const r2 = this.normalizeRarity(horses[1].rarity);
-        const lowestRarity = this.rarityOrder[r1] <= this.rarityOrder[r2] ? r1 : r2;
+        const highestRarity = this.rarityOrder[r1] <= this.rarityOrder[r2] ? r2 : r1;
 
-        // Use the parent's MAX currentBreeds (not the sum)
+        // Use MAX currentBreeds between parents
         const breedsA = horses[0].currentBreeds ?? 0;
         const breedsB = horses[1].currentBreeds ?? 0;
         const maxCurrentBreeds = Math.max(breedsA, breedsB);
 
-        // Oracle price (cached)
-        const { usdPriceFormatted } = await this.getPhorseUsdOracle();
-
-        const usd = Number(usdPriceFormatted);
-
-        if (!Number.isFinite(usd) || usd <= 0) {
-            throw new ServiceUnavailableException('Oracle price invalid');
-        }
-
-        // Base USD from rarity, then add +$1 per current breed on the higher-breed parent
-        const baseUsdBare = this.breedBaseUsd[lowestRarity];
+        // Base USD from rarity (keep your existing table)
+        const baseUsdBare = this.breedBaseUsd[highestRarity];
         if (!Number.isFinite(baseUsdBare)) {
-            throw new ServiceUnavailableException(`Base USD not defined for rarity ${lowestRarity}`);
-        }
-        const baseUsdWithModifier = baseUsdBare + maxCurrentBreeds * 5; // $5 per consecutive breed
-
-        // PHORSE cost
-        let rawPhorse = baseUsdWithModifier / usd + maxCurrentBreeds * usd;
-
-        if (horses[0].gen > 0 || horses[1].gen > 0) {
-            rawPhorse = rawPhorse * 1.80;
+            throw new ServiceUnavailableException(`Base USD not defined for rarity ${highestRarity}`);
         }
 
-        if (!Number.isFinite(rawPhorse) || rawPhorse <= 0) {
-            throw new ServiceUnavailableException('Calculated PHORSE cost invalid');
-        }
-        const phorseCost = Math.ceil(rawPhorse);
+        // +$2.50 per current breed on the higher-breed parent (from globals)
+        const perBreedUsd =
+            (globals as any)['Breed USD Per Breed Increment'] ?? 2.5;
+        const baseUsdWithModifier = baseUsdBare + maxCurrentBreeds * perBreedUsd;
 
-        // RON cost indexed by (maxCurrentBreeds + 1)
-        const ronKey = maxCurrentBreeds + 1;
-        const ronCost = this.breedBaseRon[ronKey];
-        if (ronCost == null) {
-            throw new ServiceUnavailableException(`RON cost not defined for breed #${ronKey}`);
+        // Keep gen multiplier behavior
+        const genMultiplier =
+            (horses[0].gen > 0 || horses[1].gen > 0) ? 1.80 : 1.0;
+
+        // Convert USD total to WRON at fixed price from globals
+        const wronUsd = (globals as any)['WRON USD Price'] ?? 0.4;
+        if (!Number.isFinite(wronUsd) || wronUsd <= 0) {
+            throw new ServiceUnavailableException('WRON price not configured');
         }
 
-        return {
-            phorseCost,
-            ronCost,
-        };
+        const totalUsd = baseUsdWithModifier * genMultiplier;
+        if (!Number.isFinite(totalUsd) || totalUsd <= 0) {
+            throw new ServiceUnavailableException('Calculated USD cost invalid');
+        }
+
+        const ronCost = Math.ceil(totalUsd / wronUsd);
+
+        // PHORSE is no longer charged but keep the field for compatibility
+        const phorseCost = 0;
+
+        return { phorseCost, ronCost };
     }
+
 
     /**
      * Finds a user by wallet address or creates one with phorse = 0.
@@ -2035,16 +2029,14 @@ export class UserService {
             const taxResult = await tx.user.updateMany({
                 where: {
                     wallet: ownerWallet,
-                    phorse: { gte: totalTax },
+                    wron: { gte: totalTax },
                 },
                 data: {
-                    phorse: { decrement: totalTax },
-                    totalPhorseSpent: { increment: totalTax },
-                    burnScore: { increment: totalTax }
+                    wron: { decrement: totalTax },
                 },
             });
             if (taxResult.count === 0) {
-                throw new BadRequestException('Insufficient PHORSE to pay withdraw tax');
+                throw new BadRequestException('Insufficient WRON to pay withdraw tax');
             }
 
             // 3. Fetch internal user ID
@@ -2345,17 +2337,27 @@ export class UserService {
     }
 
     /**
-    * Open a single "Medal Bag" for the given wallet.
+    * Open a single bag ("Medal Bag" or "PHORSE Bag") for the given wallet.
     * - Concurrency-safe single-row delete (CTE + SKIP LOCKED)
     * - Only consumes unequipped bags (horseId IS NULL)
     * - Idempotent if idempotencyKey is provided
     */
     async openBag(
         ownerWallet: string,
+        itemName: string,   // ← CHANGED
         idempotencyKey?: string
-    ): Promise<{ added: number; newMedals: number; remainingBags: number }> {
-        const ITEM_NAME = 'Medal Bag';
-        const MEDALS_PER_BAG = 50;
+    ): Promise<
+        | { added: number; newMedals: number; remainingBags: number }
+        | { added: number; newPhorse: number; remainingBags: number }
+    > {
+        // ← NEW: per-bag config (adjust PHORSE amount to your economy)
+        const BAG_DEFS: Record<string, { reward: 'medals' | 'phorse'; amount: number }> = {
+            'Medal Bag': { reward: 'medals', amount: 50 },
+            'PHORSE Bag': { reward: 'phorse', amount: 10000 }, // ← choose your value
+        };
+
+        const def = BAG_DEFS[itemName];
+        if (!def) throw new BadRequestException('Unsupported bag type');
 
         // Basic validation
         if (!ownerWallet || typeof ownerWallet !== 'string') {
@@ -2366,14 +2368,14 @@ export class UserService {
         }
 
         return this.prisma.$transaction(async (tx) => {
-            // 1) Find user (select minimal fields)
+            // 1) Find user
             const user = await tx.user.findUnique({
                 where: { wallet: ownerWallet },
                 select: { id: true },
             });
             if (!user) throw new NotFoundException('User not found');
 
-            // 2) If idempotencyKey provided and we already processed it, return current state
+            // 2) Idempotency: if processed, return current balances + remaining bags
             if (idempotencyKey) {
                 const existing = await tx.transaction.findFirst({
                     where: {
@@ -2385,52 +2387,61 @@ export class UserService {
                     select: { id: true },
                 });
                 if (existing) {
-                    // Already processed once; return current medals + remaining bag count
                     const [u, remainingBags] = await Promise.all([
-                        tx.user.findUnique({ where: { id: user.id }, select: { medals: true } }),
+                        tx.user.findUnique({
+                            where: { id: user.id },
+                            select: { medals: true, phorse: true }, // ← ensure "phorse" exists in schema
+                        }),
                         tx.item.count({
-                            where: { ownerId: user.id, name: ITEM_NAME, horseId: null },
+                            where: { ownerId: user.id, name: itemName, horseId: null },
                         }),
                     ]);
-                    return { added: MEDALS_PER_BAG, newMedals: u!.medals, remainingBags };
+                    return def.reward === 'medals'
+                        ? { added: def.amount, newMedals: u!.medals, remainingBags }
+                        : { added: def.amount, newPhorse: (u as any)!.phorse, remainingBags };
                 }
             }
 
-            // 3) Concurrency-safe: delete exactly ONE bag using a CTE with SKIP LOCKED
-            //    This avoids double-spend under parallel requests.
+            // 3) Delete exactly ONE matching bag (CTE + SKIP LOCKED)
             type Row = { id: string };
             const rows = await tx.$queryRaw<Row[]>`
-        WITH picked AS (
-          SELECT "id"
-          FROM "Item"
-          WHERE "ownerId" = ${user.id}
-            AND "name" = ${ITEM_NAME}
-            AND "horseId" IS NULL
-          ORDER BY "createdAt" ASC
-          LIMIT 1
-          FOR UPDATE SKIP LOCKED
-        )
-        DELETE FROM "Item"
-        WHERE "id" IN (SELECT "id" FROM picked)
-        RETURNING "id";
-      `;
-
-            // No available bag (or lost race under concurrency)
+              WITH picked AS (
+                SELECT "id"
+                FROM "Item"
+                WHERE "ownerId" = ${user.id}
+                  AND "name" = ${itemName}
+                  AND "horseId" IS NULL
+                ORDER BY "createdAt" ASC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+              )
+              DELETE FROM "Item"
+              WHERE "id" IN (SELECT "id" FROM picked)
+              RETURNING "id";
+            `;
             if (!rows || rows.length === 0) {
-                // If client sent an idempotencyKey that is brand-new but no bag exists, treat as 404
-                throw new NotFoundException(`You do not own any "${ITEM_NAME}"`);
+                throw new NotFoundException(`You do not own any "${itemName}"`);
             }
 
-            // 4) Credit medals
-            const updatedUser = await tx.user.update({
-                where: { id: user.id },
-                data: { medals: { increment: MEDALS_PER_BAG } },
-                select: { medals: true },
-            });
+            // 4) Credit user
+            let updatedUser: { medals?: number; phorse?: number };
+            if (def.reward === 'medals') {
+                updatedUser = await tx.user.update({
+                    where: { id: user.id },
+                    data: { medals: { increment: def.amount } },
+                    select: { medals: true },
+                });
+            } else {
+                updatedUser = await tx.user.update({
+                    where: { id: user.id },
+                    data: { phorse: { increment: def.amount } }, // ← requires "phorse" numeric column
+                    select: { phorse: true },
+                });
+            }
 
-            // 5) Log ITEM transaction (helps audit/idempotency)
-            const note = `Opened ${ITEM_NAME} (+${MEDALS_PER_BAG} medals)${idempotencyKey ? ` [IDEMP:${idempotencyKey}]` : ''
-                }`;
+            // 5) Log ITEM transaction
+            const pretty = def.reward === 'medals' ? 'medals' : '$PHORSE';
+            const note = `Opened ${itemName} (+${def.amount} ${pretty})${idempotencyKey ? ` [IDEMP:${idempotencyKey}]` : ''}`;
             await tx.transaction.create({
                 data: {
                     ownerId: user.id,
@@ -2441,17 +2452,16 @@ export class UserService {
                 },
             });
 
-            // 6) Count remaining bags
+            // 6) Count remaining bags (same name)
             const remainingBags = await tx.item.count({
-                where: { ownerId: user.id, name: ITEM_NAME, horseId: null },
+                where: { ownerId: user.id, name: itemName, horseId: null },
             });
 
-            return {
-                added: MEDALS_PER_BAG,
-                newMedals: updatedUser.medals,
-                remainingBags,
-            };
-        }, { timeout: 10_000 }); // defensive: bound TX runtime
+            // 7) Back-compat response
+            return def.reward === 'medals'
+                ? { added: def.amount, newMedals: (updatedUser as any).medals, remainingBags }
+                : { added: def.amount, newPhorse: (updatedUser as any).phorse, remainingBags };
+        }, { timeout: 10_000 });
     }
 
     /**

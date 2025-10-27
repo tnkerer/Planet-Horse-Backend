@@ -1,5 +1,5 @@
 export const globals = {
-  "Base Denominator": 24,
+  "Base Denominator": 32,
   "Quarter-Horse Racing Index": 1,
   "Flat Racing Index": 1,
   "Draft Horse Pulling Index": 1,
@@ -29,16 +29,32 @@ export const globals = {
   },
   "Energy Spent": 12,
   "Energy Recovery Rate": 12,
-  "Energy Recovery Interval": 14400, 
+  "Energy Recovery Interval": 14400,
   "Experience Multiplier": 1,
-  "Recovery Cost" : 125,
-  "Rarity Modifier" : {
-    "Common" : 1,
-    "Uncommon" : 1.3,
-    "Rare" : 1.6,
-    "Epic" : 1.9,
-    "Legendary" : 2.2,
-    "Mythic" : 2.5
+  "Recovery Cost": 125,
+  "Rarity Modifier": {
+    "Common": 1,
+    "Uncommon": 1.3,
+    "Rare": 1.6,
+    "Epic": 1.9,
+    "Legendary": 2.2,
+    "Mythic": 2.5
   },
-  "Withdraw Tax" : 100
+  "Withdraw Tax": 0.2,
+
+  "WRON USD Price": 0.5,
+
+  "Breed Base USD By Rarity": {
+    "Common": 8,
+    "Uncommon": 11,
+    "Rare": 14,
+    "Epic": 17,
+    "Legendary": 20,
+    "Mythic": 23,
+  },
+
+  "Breed USD Per Breed Increment": 2.5,
+
+  "Breed Use Gen Multiplier": true,
+  "Breed Gen Multiplier": 1.8,
 } as const;
