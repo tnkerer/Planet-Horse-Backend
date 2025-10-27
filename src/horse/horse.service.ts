@@ -103,50 +103,70 @@ function samplePosition(dist: number[], rng: () => number = Math.random): number
   return 6; // fallback
 }
 
-// ── Position-aware random reward roller (replacement) ──────────────────────────
+type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary' | 'Mythic';
+
 function rollRewards(
   position: number,
-  rewardsCfg: Record<string, readonly [number, number]>
+  rewardsCfg: Record<string, readonly [number, number]>,
+  opts?: { level?: number; levelCap?: number; rarity?: Rarity }
 ) {
-  // XP base stays from your table, unchanged
+  // XP unchanged (from table)
   const xpBase = rewardsCfg[position.toString()][0];
 
-  // Clamp pos into [1..10] defensively
+  // Clamp pos into [1..10]
   const pos = Math.min(10, Math.max(1, position));
-
-  // Linear helpers: pos=1 → hi, pos=10 → lo
-  const lerp = (hi: number, lo: number, t: number) => hi + (lo - hi) * t; // t in [0..1]
+  const lerp = (hi: number, lo: number, t: number) => hi + (lo - hi) * t;
   const t = (pos - 1) / 9; // 0 at P1, 1 at P10
 
-  // ---- Currency selection bias by position -----------------------------------
-  // Higher chance of WRON in better positions, much lower in worse positions.
-  // e.g., ~10% at P1 down to ~1% at P10 (tweak freely)
-  const wronProb = lerp(0.03, 0.002, t); // position-weighted currency split
-
-  // ---- PHORSE magnitude depends strongly on position -------------------------
-  // Top places can roll much higher PHORSE bases; back of the pack gets small rolls.
-  // Keep bounds conservative since later multipliers can be huge.
-  const phorseMin = lerp(20, 5, t);     // P1≈20  →  P10≈5
-  const phorseMax = lerp(200, 40, t);   // P1≈200 →  P10≈40
-
-  // ---- WRON magnitude is small and capped; only chance changes with position -
+  // ── WRON (UNCHANGED) ────────────────────────────────────────────────────────
+  const wronProb = lerp(0.03, 0.002, t);
   const wronMin = 0.1;
   const wronMax = 4;
+  const wronJackpotProb = lerp(0.002, 0.0003, t);
 
-  // ---- Jackpot probs also position-weighted (still VERY HARD) ----------------
-  // Slightly easier at the top, still very rare overall.
-  const phorseJackpotProb = lerp(0.004, 0.0005, t);
-  const wronJackpotProb = lerp(0.002, 0.0003, t); // 0.2% → 0.03%
+  // ── PHORSE base range (position only baseline) ──────────────────────────────
+  let phorseMin = lerp(20, 5, t);     // P1≈20 → P10≈5  (baseline)
+  let phorseMax = lerp(200, 40, t);   // P1≈200 → P10≈40 (baseline)
+  let phorseJackpotProb = lerp(0.004, 0.0005, t); // baseline very-hard
 
+  // ── NEW: Level widens PHORSE range (min & max), rarity boosts JACKPOT only ─
+  const level = Math.max(1, opts?.level ?? 1);
+  const levelCap = Math.max(level, opts?.levelCap ?? 100);
+  // Normalized level in [0..1]; ease a bit so progress is felt early without exploding:
+  const n = Math.max(0, Math.min(1, level / levelCap));
+  const nEase = Math.pow(n, 0.65); // gentle concave curve
+
+  // Scale BOTH min & max with level (PHORSE ONLY)
+  // Tunable: up to +60% on min and +120% on max at cap.
+  const minLevelMul = 1 + 0.60 * nEase;
+  const maxLevelMul = 1 + 1.20 * nEase;
+
+  phorseMin *= minLevelMul;
+  phorseMax *= maxLevelMul;
+  if (phorseMax < phorseMin) phorseMax = phorseMin;
+
+  // Rarity → jackpot multiplier ONLY (PHORSE ONLY)
+  const rarityToJPMul: Record<Rarity, number> = {
+    Common: 1.00,
+    Uncommon: 1.10,
+    Rare: 1.25,
+    Epic: 1.50,
+    Legendary: 1.80,
+    Mythic: 2.20,
+  };
+  const rMul = rarityToJPMul[(opts?.rarity as Rarity) ?? 'Common'] ?? 1.0;
+
+  phorseJackpotProb = Math.min(0.01, phorseJackpotProb * rMul); // hard cap @ 1%
+
+  // ── Roller ──────────────────────────────────────────────────────────────────
   const rollWithJackpot = (min: number, max: number, jackpotProb: number) => {
     const jackpot = Math.random() < jackpotProb;
-    let reward = max;
-    if (jackpot) return { reward, jackpot }; // JACKPOT
-    reward = parseFloat((min + Math.random() * (max - min)).toFixed(2));
+    if (jackpot) return { reward: max, jackpot };
+    const reward = parseFloat((min + Math.random() * (max - min)).toFixed(2));
     return { reward, jackpot };
   };
 
-  // Decide which currency this run pays out (mutually exclusive)
+  // Decide currency (mutually exclusive)
   const rollWRON = Math.random() < wronProb;
 
   if (rollWRON) {
@@ -638,7 +658,14 @@ export class HorseService {
 
       const rewardsCfg = globals['Rewards'] as Record<string, readonly [number, number]>;
       // rewards follow from position as you already do
-      const { xpBase, phorseBase, wronBase, jackpot } = rollRewards(position, rewardsCfg);
+      const { xpBase, phorseBase, wronBase, jackpot } = rollRewards(
+        position,
+        rewardsCfg,
+        {
+          level: horse.level,
+          levelCap: levelLimits[horse.rarity] ?? 100,
+          rarity: horse.rarity as any, // 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary' | 'Mythic'
+        });
 
       const baseXpReward = Math.floor(xpBase * baseXpMod * (globals['Experience Multiplier'] as number));
       const xpReward = Math.floor(baseXpReward * totalModifier.xpMultiplier);
@@ -980,7 +1007,15 @@ export class HorseService {
 
         const hasJinDaRat = horse.equipments?.some(it => it.name === 'JinDaRat');
 
-        const { xpBase, phorseBase, wronBase, jackpot } = rollRewards(position, rewardsCfg);
+        const { xpBase, phorseBase, wronBase, jackpot } = rollRewards(
+          position,
+          rewardsCfg,
+          {
+            level: horse.level,
+            levelCap: levelLimits[horse.rarity] ?? 100,
+            rarity: horse.rarity as any, // 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary' | 'Mythic'
+          }
+        );
         const baseXp = Math.floor(xpBase * baseXpMod * xpMultGlobal);
         const xpReward = Math.floor(baseXp * mods.xpMultiplier);
 
