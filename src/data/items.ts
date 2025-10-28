@@ -2,6 +2,7 @@ export const items = {
     "PHORSE Bag": {
         "name": "PHORSE Bag",
         "src": "phorse_bag",
+        "description": "A bag containing 10k PHORSE!",
         "breakable": true,
         "consumable": true,
         "uses": 1,
