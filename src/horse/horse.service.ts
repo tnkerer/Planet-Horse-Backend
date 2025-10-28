@@ -924,8 +924,12 @@ export class HorseService {
         perHorseShardCost[h.tokenId] = c;
         totalShardCost += c;
       }
-      if ((user.shards ?? 0) < totalShardCost) {
-        throw new BadRequestException(`Not enough SHARDS: need ${totalShardCost}, have ${user.shards ?? 0}`);
+      const dec = await tx.user.updateMany({
+        where: { id: user.id, shards: { gte: totalShardCost } },
+        data: { shards: { decrement: totalShardCost } },
+      });
+      if (dec.count !== 1) {
+        throw new BadRequestException(`Not enough SHARDS: need ${totalShardCost}`);
       }
 
       // Prepare accumulators
@@ -955,8 +959,6 @@ export class HorseService {
 
       // Common globals
       const baseEnergy = globals['Energy Spent'] as number;
-      const winrates = globals['Winrates'] as Record<string, number>;
-      const winThresholds = Object.keys(winrates).map(parseFloat).sort((a, b) => a - b);
       const rewardsCfg = globals['Rewards'];
       const xpMultGlobal = globals['Experience Multiplier'] as number;
 
@@ -1169,21 +1171,27 @@ export class HorseService {
         energySpentByToken[h.tokenId] = Math.max(1, baseEnergy - mods.energySaved);
       }
 
+      const phorseDelta = rawResults.reduce((s, r) => s + r.tokenReward, 0) - totalCost;
+      const wronDelta = rawResults.reduce((s, r) => s + r.wronReward, 0);
+      const medalsDelta = rawResults.reduce((s, r) => s + r.medalReward, 0);
+      const spentDelta = totalCost;
+      const earnedDelta = rawResults.reduce((s, r) => s + r.tokenReward, 0);
+      const burnDelta = totalCost;
+
       // 4) Batch all writes
       await Promise.all([
         // user
         tx.user.update({
           where: { id: user.id },
           data: {
-            phorse: user.phorse + rawResults.reduce((s, r) => s + r.tokenReward, 0) - totalCost,
-            wron: user.wron + rawResults.reduce((s, r) => s + r.wronReward, 0),
-            totalPhorseSpent: user.totalPhorseSpent + totalCost,
-            burnScore: user.burnScore + totalCost,
-            medals: user.medals + rawResults.reduce((s, r) => s + r.medalReward, 0),
-            totalPhorseEarned: user.totalPhorseEarned + rawResults.reduce((s, r) => s + r.tokenReward, 0),
-            shards: { decrement: totalShardCost },
-            ...(user.lastRace ? {} : { lastRace: new Date() })
-          }
+            phorse: { increment: phorseDelta },
+            wron: { increment: wronDelta },
+            medals: { increment: medalsDelta },
+            totalPhorseSpent: { increment: spentDelta },
+            totalPhorseEarned: { increment: earnedDelta },
+            burnScore: { increment: burnDelta },
+            ...(user.lastRace ? {} : { lastRace: new Date() }),
+          },
         }),
         // horses
         Promise.all(itemUsageOps),
