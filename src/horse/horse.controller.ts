@@ -73,7 +73,7 @@ export class HorseController {
     return this.horseService.startRace(ownerWallet, tokenId);
   }
 
-  @UseGuards(IsMultipleOwnerGuard)
+  /* @UseGuards(IsMultipleOwnerGuard)
   @Put('start-multiple-race')
   @Throttle({ default: { limit: 250, ttl: 30_000 } })
   async startMultipleRace(
@@ -82,7 +82,7 @@ export class HorseController {
   ) {
     const ownerWallet = req.user.wallet as string;
     return this.horseService.startMultipleRace(ownerWallet, tokenIds);
-  }
+  } */
 
   /**
   * PUT /horses/:tokenId/restore
