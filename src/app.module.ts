@@ -14,6 +14,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ReferralXpCronService } from './user/referral-xp-cron.service';
 import { StableModule } from './stable/stable.module';
+import { QuestModule } from './quest/quest.module';
 
 @Module({
   imports: [
@@ -32,7 +33,8 @@ import { StableModule } from './stable/stable.module';
     AuthModule,
     UserModule,
     HorseModule,
-    StableModule
+    StableModule,
+    QuestModule
   ],
   controllers: [AppController],
   providers: [
@@ -82,8 +84,11 @@ export class AppModule implements NestModule {
         { path: 'user/set-referred-by', method: RequestMethod.POST},
         { path: 'horses/*', method: RequestMethod.PUT },
         { path: 'simulate', method: RequestMethod.POST },
-        { path: 'stable/*', method: RequestMethod.POST }
-        // { path: 'stable/buy', method: RequestMethod.POST}
+        { path: 'stable/*', method: RequestMethod.POST },
+        { path: 'quest/claim', method: RequestMethod.POST },
+        { path: 'quest/checkin', method: RequestMethod.POST },
+        { path: 'quest/create', method: RequestMethod.POST },
+        { path: 'quest/admin/sync', method: RequestMethod.POST }
       )
       .forRoutes('*')
   }

@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { globals } from '../data/globals';
 import { items as allItems, itemModifiers, itemDrops, chestDrops, trophyDrops } from '../data/items';
@@ -8,14 +8,14 @@ import { rarityBase } from '../data/rarity_base';
 import { Status } from '@prisma/client';
 import { EquipItemDto } from './dto/equip-item.dto';
 import { UnequipItemDto } from './dto/unequip-item.dto';
-import { Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import Moralis from 'moralis';
+import { QuestService } from '../quest/quest.service';
 
-const MORALIS_API_KEY = process.env.MORALIS_API_KEY; // Use .env file for safety
-const NFT_CONTRACT_ADDRESS = process.env.NFT_CONTRACT_ADDRESS || '0x66eeb20a1957c4b3743ecad19d0c2dbcf56b683f'; // Your contract address
-const NFT_CONTRACT_ADDRESS_OFH = process.env.NFT_CONTRACT_ADDRESS_OFH || '0x1296ffefc43ff7eb4b7617c02ef80253db905215'; // Your contract address
+const MORALIS_API_KEY = process.env.MORALIS_API_KEY;
+const NFT_CONTRACT_ADDRESS = process.env.NFT_CONTRACT_ADDRESS
+const NFT_CONTRACT_ADDRESS_OFH = process.env.NFT_CONTRACT_ADDRESS_OFH
 const CHAIN_ID = 2020;
 
 export interface RewardsSuccess {
@@ -186,6 +186,7 @@ export class HorseService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    @Inject(forwardRef(() => QuestService)) private readonly questService: QuestService,
   ) { }
 
   private static inFlight = new Map<string, Promise<string[]>>();
@@ -262,6 +263,9 @@ export class HorseService {
       const userId = user.id;
 
       // 2) NFTs on-chain (horses) — via cache
+      if (!NFT_CONTRACT_ADDRESS || !NFT_CONTRACT_ADDRESS_OFH) {
+        throw new Error('NFT contract addresses are not configured');
+      }
       const tokenIds = await this.getWalletTokenIdsCached(walletAddress, [NFT_CONTRACT_ADDRESS, NFT_CONTRACT_ADDRESS_OFH]);
       if (!tokenIds.length) return [];
 
@@ -458,7 +462,7 @@ export class HorseService {
     const newPresale = Math.max(user.presalePhorse - phorseCost, 0);
 
     // ---------- ATOMIC TX: use ticket (same delete pattern as startRace) and/or take fees + update horse ----------
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // If using ticket, fetch & consume ONE item row like in startRace (find → update/delete)
       if (useTicket) {
         const ticket = await tx.item.findFirst({
@@ -556,6 +560,7 @@ export class HorseService {
       }
 
       return {
+        userId: user.id,
         level: newLevel,
         currentPower: Number(updatedPower.toFixed(2)),
         currentSprint: Number(updatedSprint.toFixed(2)),
@@ -568,6 +573,20 @@ export class HorseService {
         userMedals: updatedUser?.medals,
       };
     });
+
+    // Quest progression: track level ups and PHORSE spent
+    try {
+      const { QuestType } = await import('../quest/quest.types');
+      await this.questService.incrementQuestProgress(result.userId, QuestType.LEVEL_UP_HORSES, 1);
+      if (phorseCost > 0) {
+        await this.questService.incrementQuestProgress(result.userId, QuestType.SPEND_PHORSE, phorseCost);
+      }
+    } catch (err) {
+      console.error('Failed to update quest progress for level up:', err);
+    }
+
+    const { userId, ...resultWithoutUserId } = result;
+    return resultWithoutUserId;
   }
 
   /**
@@ -582,7 +601,7 @@ export class HorseService {
   * 8. Return { xpReward, tokenReward, medalReward, position, finalStatus }.
   */
   async startRace(ownerWallet: string, tokenId: string) {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.findUnique({
         where: { wallet: ownerWallet },
         select: {
@@ -846,6 +865,7 @@ export class HorseService {
 
       // ─── return everything ──────────────────────────────────────────────────────
       return {
+        userId: user.id,
         xpReward,
         tokenReward,
         medalReward,
@@ -857,6 +877,27 @@ export class HorseService {
         droppedChests,
       };
     });
+
+    // Quest progression: track race completion and wins
+    try {
+      const { QuestType } = await import('../quest/quest.types');
+      await this.questService.incrementQuestProgress(result.userId, QuestType.RUN_RACES, 1);
+      if (result.position === 1) {
+        await this.questService.incrementQuestProgress(result.userId, QuestType.WIN_RACES, 1);
+      }
+
+      // Track PHORSE earned from race
+      if (result.tokenReward > 0) {
+        await this.questService.incrementQuestProgress(result.userId, QuestType.EARN_PHORSE, result.tokenReward);
+      }
+    } catch (err) {
+      // Don't fail the race if quest update fails
+      console.error('Failed to update quest progress for race:', err);
+    }
+
+    // Remove userId from response
+    const { userId, ...resultWithoutUserId } = result;
+    return resultWithoutUserId;
   }
 
   /**
@@ -1345,7 +1386,19 @@ export class HorseService {
       return {
         newStatus: updatedHorse.status as 'IDLE' | 'SLEEP',
         userPhorse: updatedUser.phorse,
+        userId: user.id,
+        costSpent: cost,
       };
+    }).then(async (result) => {
+      // Quest progression: track energy restoration and PHORSE spending
+      try {
+        const { QuestType } = await import('../quest/quest.types');
+        await this.questService.incrementQuestProgress(result.userId, QuestType.RESTORE_ENERGY, 1);
+        await this.questService.incrementQuestProgress(result.userId, QuestType.SPEND_PHORSE, result.costSpent);
+      } catch (err) {
+        console.error('Failed to update quest progress for restore:', err);
+      }
+      return { newStatus: result.newStatus, userPhorse: result.userPhorse };
     });
   }
 
@@ -1631,7 +1684,7 @@ export class HorseService {
           data: { currentEnergy: 0, status: statusAfter },
         });
 
-        return { success: true };
+        return { success: true as const, userId };
       }
 
       // Fetch updated equipment (including this newly equipped item)
@@ -1669,7 +1722,16 @@ export class HorseService {
         });
       }
 
-      return { success: true };
+      return { success: true as const, userId };
+    }).then(async (result) => {
+      // Quest progression: track item equipping
+      try {
+        const { QuestType } = await import('../quest/quest.types');
+        await this.questService.incrementQuestProgress(result.userId, QuestType.EQUIP_ITEMS, 1);
+      } catch (err) {
+        console.error('Failed to update quest progress for equip item:', err);
+      }
+      return { success: true as const };
     });
   }
 
