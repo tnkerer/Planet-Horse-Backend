@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, ServiceUnavailableException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { chests } from 'src/data/items';
 import { TransactionStatus, TransactionType, Request } from '@prisma/client';
@@ -10,6 +10,7 @@ import { itemUpgradeCost, successRate, upgradePoints } from 'src/data/item_progr
 import { randomBytes } from 'crypto';
 import { itemCraftReq } from '../data/item_crafting';
 import { rarityBase } from 'src/data/rarity_base';
+import { QuestService } from '../quest/quest.service';
 
 type Rarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY' | 'MYTHIC';
 type OracleResp = {
@@ -53,7 +54,11 @@ type StableSalePreflightResponse = {
 
 @Injectable()
 export class UserService {
-    constructor(private readonly prisma: PrismaService, private readonly horseService: HorseService) { }
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly horseService: HorseService,
+        @Inject(forwardRef(() => QuestService)) private readonly questService: QuestService,
+    ) { }
 
     /**
     * Finds or creates (idempotently) the StableSale row for a given wallet,
@@ -544,9 +549,24 @@ export class UserService {
             return {
                 child,
                 costs: { phorseCost, ronCost },
-                breed
+                breed,
+                ownerId: p1.ownerId,
             };
-        }, { timeout: 10_000 });
+        }, { timeout: 10_000 }).then(async (result) => {
+            // Quest progression: track breeding and PHORSE spent
+            try {
+                const { QuestType } = await import('../quest/quest.types');
+                await this.questService.incrementQuestProgress(result.ownerId, QuestType.BREED_HORSES, 1);
+                if (result.costs.phorseCost > 0) {
+                    await this.questService.incrementQuestProgress(result.ownerId, QuestType.SPEND_PHORSE, result.costs.phorseCost);
+                }
+            } catch (err) {
+                console.error('Failed to update quest progress for breeding:', err);
+            }
+            // Remove ownerId before returning
+            const { ownerId, ...resultWithoutOwnerId } = result;
+            return resultWithoutOwnerId;
+        });
     }
 
     async preflightBreedByTokenIds(
@@ -1327,7 +1347,16 @@ export class UserService {
                 },
             });
 
-            return chest;
+            return { chest, userId: user.id, totalCost };
+        }).then(async (result) => {
+            // Quest progression: track PHORSE spending on chest purchase
+            try {
+                const { QuestType } = await import('../quest/quest.types');
+                await this.questService.incrementQuestProgress(result.userId, QuestType.SPEND_PHORSE, result.totalCost);
+            } catch (err) {
+                console.error('Failed to update quest progress for chest purchase:', err);
+            }
+            return result.chest;
         });
     }
 
@@ -1370,6 +1399,7 @@ export class UserService {
 
             // 3) roll and collect drops
             const drops: string[] = [];
+            let totalPhorseEarned = 0;
             const lookup = chestsPercentage[chestType];
             if (!lookup) {
                 throw new NotFoundException(`Chest type ${chestType} unknown`);
@@ -1391,6 +1421,7 @@ export class UserService {
                     if (Number.isNaN(amount)) {
                         throw new Error(`Bad phorse drop "${name}"`);
                     }
+                    totalPhorseEarned += amount;
                     await tx.user.update({
                         where: { id: user.id },
                         data: {
@@ -1440,7 +1471,19 @@ export class UserService {
                 });
             }
 
-            return drops;
+            return { drops, userId: user.id, count: chestQuantity, totalPhorseEarned };
+        }).then(async (result) => {
+            // Quest progression: track chest opening and PHORSE earned
+            try {
+                const { QuestType } = await import('../quest/quest.types');
+                await this.questService.incrementQuestProgress(result.userId, QuestType.OPEN_CHESTS, result.count);
+                if (result.totalPhorseEarned > 0) {
+                    await this.questService.incrementQuestProgress(result.userId, QuestType.EARN_PHORSE, result.totalPhorseEarned);
+                }
+            } catch (err) {
+                console.error('Failed to update quest progress for opening chest:', err);
+            }
+            return result.drops;
         });
     }
 
@@ -1569,7 +1612,16 @@ export class UserService {
             // 7) log all transactions in one call
             await tx.transaction.createMany({ data: txLogs });
 
-            return rewards;
+            return { rewards, userId: user.id, count: quantity };
+        }).then(async (result) => {
+            // Quest progression: track item recycling
+            try {
+                const { QuestType } = await import('../quest/quest.types');
+                await this.questService.incrementQuestProgress(result.userId, QuestType.RECYCLE_ITEMS, result.count);
+            } catch (err) {
+                console.error('Failed to update quest progress for recycling items:', err);
+            }
+            return result.rewards;
         });
     }
 
@@ -1717,6 +1769,28 @@ export class UserService {
                 success: succeeded,
                 broken: willBreak,
                 itemId: finalItemId,
+                userId: user.id,
+                phorseSpent: cost.phorse,
+            };
+        }).then(async (result) => {
+            // Quest progression: track item upgrades and PHORSE spent
+            try {
+                const { QuestType } = await import('../quest/quest.types');
+                // Only increment UPGRADE_ITEMS if the upgrade succeeded
+                if (result.success) {
+                    await this.questService.incrementQuestProgress(result.userId, QuestType.UPGRADE_ITEMS, 1);
+                }
+                // Track PHORSE spent regardless of success/failure
+                if (result.phorseSpent > 0) {
+                    await this.questService.incrementQuestProgress(result.userId, QuestType.SPEND_PHORSE, result.phorseSpent);
+                }
+            } catch (err) {
+                console.error('Failed to update quest progress for upgrading items:', err);
+            }
+            return {
+                success: result.success,
+                broken: result.broken,
+                itemId: result.itemId,
             };
         });
     }
@@ -2077,6 +2151,22 @@ export class UserService {
             return {
                 requestId: itemRequest.id,
                 message: `${quantity} ${itemName} item(s) added to bridge queue!`,
+                userId: user.id,
+                totalTax,
+            };
+        }).then(async (result) => {
+            // Quest progression: track PHORSE spent on withdraw tax
+            try {
+                const { QuestType } = await import('../quest/quest.types');
+                if (result.totalTax > 0) {
+                    await this.questService.incrementQuestProgress(result.userId, QuestType.SPEND_PHORSE, result.totalTax);
+                }
+            } catch (err) {
+                console.error('Failed to update quest progress for item withdraw:', err);
+            }
+            return {
+                requestId: result.requestId,
+                message: result.message,
             };
         });
     }
@@ -2494,7 +2584,7 @@ export class UserService {
                         where: { id: user.id },
                         select: { phorse: true, medals: true },
                     });
-                    return { crafted: target, phorse: bal!.phorse, medals: bal!.medals };
+                    return { crafted: target, phorse: bal!.phorse, medals: bal!.medals, userId: user.id, phorseCost: 0 };
                 }
             }
 
@@ -2584,7 +2674,18 @@ export class UserService {
                 },
             });
 
-            return { crafted: target, phorse: bal!.phorse, medals: bal!.medals };
-        }, { timeout: 10_000 });
+            return { crafted: target, phorse: bal!.phorse, medals: bal!.medals, userId: user.id, phorseCost };
+        }, { timeout: 10_000 }).then(async (result) => {
+            // Quest progression: track PHORSE spent on crafting
+            try {
+                const { QuestType } = await import('../quest/quest.types');
+                if (result.phorseCost > 0) {
+                    await this.questService.incrementQuestProgress(result.userId, QuestType.SPEND_PHORSE, result.phorseCost);
+                }
+            } catch (err) {
+                console.error('Failed to update quest progress for crafting:', err);
+            }
+            return { crafted: result.crafted, phorse: result.phorse, medals: result.medals };
+        });
     }
 }

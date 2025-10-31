@@ -56,6 +56,10 @@ model User {
 
   // Stables
   leases             StableLease[]
+
+  // Quests
+  userQuests         UserQuest[]
+  dailyCheckin       DailyCheckin?
 }
 
 model ReferralXPLog {
@@ -494,5 +498,78 @@ model StableLease {
   @@index([stableId])
   @@index([lesseeId])
   @@index([status, endAt])
+}
+
+enum QuestDifficulty {
+  SIMPLE    // IDs 1-9999
+  MEDIUM    // IDs 10000-19999
+  ADVANCED  // IDs 20000-29999
+}
+
+enum QuestType {
+  WIN_RACES          // Win X races
+  RUN_RACES          // Complete X races (any position)
+  BREED_HORSES       // Breed X horses
+  LEVEL_UP_HORSES    // Level up X horses
+  EQUIP_ITEMS        // Equip X items on horses
+  OPEN_CHESTS        // Open X chests
+  SPEND_PHORSE       // Spend X PHORSE tokens
+  EARN_PHORSE        // Earn X PHORSE tokens
+  UPGRADE_ITEMS      // Upgrade X items
+  RECYCLE_ITEMS      // Recycle X items
+  RESTORE_ENERGY     // Restore energy X times
+  CLAIM_REWARDS      // Claim X quest rewards
+  DAILY_CHECKIN      // Daily check-in
+}
+
+model Quest {
+  id                 Int              @id
+  title              String
+  description        String
+  questType          QuestType        // Type of quest action to track
+  reward             Json             // Array of {type: 'phorse'|'wron'|'medals'|'item', amount: number, itemName?: string}
+  questsToComplete   Int              // Number of times action must be completed
+  difficulty         QuestDifficulty
+  isActive           Boolean          @default(true)
+  isDailyQuest       Boolean          @default(false) // If true, resets daily at 00:00 UTC
+  horsesToUnlock     Int              @default(0)     // Minimum number of horses required to see this quest
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  userQuests         UserQuest[]
+}
+
+model UserQuest {
+  id          String    @id @default(uuid())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  quest       Quest     @relation(fields: [questId], references: [id], onDelete: Cascade)
+  questId     Int
+  progress    Int       @default(0)
+  completed   Boolean   @default(false)
+  claimed     Boolean   @default(false)
+  completedAt DateTime?
+  claimedAt   DateTime?
+  expiresAt   DateTime? // For daily quests, when they expire (next 00:00 UTC)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, questId])
+  @@index([userId])
+  @@index([questId])
+  @@index([completed, claimed])
+  @@index([expiresAt])
+}
+
+model DailyCheckin {
+  id             String   @id @default(uuid())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String   @unique
+  lastCheckinAt  DateTime
+  streak         Int      @default(1)
+  totalCheckins  Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
 }
 
