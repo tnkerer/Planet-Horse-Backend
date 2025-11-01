@@ -6,8 +6,7 @@ export const QUEST_SEED_DATA = [
     description: 'Log in to the game daily',
     questType: 'DAILY_CHECKIN',
     reward: [
-      { type: 'phorse', amount: 50 },
-      { type: 'medals', amount: 10 },
+      { type: 'shards', amount: 250 },
     ],
     questsToComplete: 1,
     difficulty: 'SIMPLE',
@@ -15,21 +14,21 @@ export const QUEST_SEED_DATA = [
     horsesToUnlock: 0,
   },
 
-/*   // 2. WIN_RACES
+  // 2. WIN_RACES
   {
     id: 2,
-    title: 'First Victory',
-    description: 'Win your first race with any horse',
+    title: 'Victorious',
+    description: 'Win 3 races in 1st place',
     questType: 'WIN_RACES',
     reward: [
-      { type: 'phorse', amount: 100 },
-      { type: 'medals', amount: 15 },
+      { type: 'shards', amount: 1200 },
+      { type: 'medals', amount: 35 },
     ],
-    questsToComplete: 1,
+    questsToComplete: 3,
     difficulty: 'SIMPLE',
-    isDailyQuest: false,
-    horsesToUnlock: 1,
-  }, */
+    isDailyQuest: true,
+    horsesToUnlock: 15,
+  },
 
   // 3. RUN_RACES
   {
@@ -38,8 +37,7 @@ export const QUEST_SEED_DATA = [
     description: 'Complete your first race',
     questType: 'RUN_RACES',
     reward: [
-      { type: 'phorse', amount: 75 },
-      { type: 'medals', amount: 10 },
+      { type: 'shards', amount: 175 },
     ],
     questsToComplete: 1,
     difficulty: 'SIMPLE',
@@ -47,21 +45,20 @@ export const QUEST_SEED_DATA = [
     horsesToUnlock: 1,
   },
 
-/*   // 4. BREED_HORSES
   {
     id: 4,
-    title: 'First Breed',
-    description: 'Breed two horses together for the first time',
-    questType: 'BREED_HORSES',
+    title: 'Pro Jockey',
+    description: 'Complete 10 races',
+    questType: 'RUN_RACES',
     reward: [
-      { type: 'phorse', amount: 200 },
-      { type: 'medals', amount: 20 },
+      { type: 'shards', amount: 400 },
+      { type: 'item', itemName: 'Pumpers', amount: 1}
     ],
-    questsToComplete: 1,
+    questsToComplete: 10,
     difficulty: 'SIMPLE',
     isDailyQuest: false,
-    horsesToUnlock: 2,
-  }, */
+    horsesToUnlock: 5,
+  },
 
   // 5. LEVEL_UP_HORSES
   {
@@ -70,13 +67,12 @@ export const QUEST_SEED_DATA = [
     description: 'Level up any horse',
     questType: 'LEVEL_UP_HORSES',
     reward: [
-      { type: 'phorse', amount: 150 },
-      { type: 'medals', amount: 15 },
+      { type: 'shards', amount: 400 },
     ],
     questsToComplete: 1,
     difficulty: 'SIMPLE',
     isDailyQuest: true,
-    horsesToUnlock: 1,
+    horsesToUnlock: 5,
   },
 
 /*   // 6. EQUIP_ITEMS
@@ -102,8 +98,7 @@ export const QUEST_SEED_DATA = [
     description: 'Open your first chest',
     questType: 'OPEN_CHESTS',
     reward: [
-      { type: 'phorse', amount: 150 },
-      { type: 'medals', amount: 20 },
+      { type: 'shards', amount: 150 },
     ],
     questsToComplete: 1,
     difficulty: 'SIMPLE',
@@ -115,29 +110,29 @@ export const QUEST_SEED_DATA = [
   {
     id: 8,
     title: 'Big Spender',
-    description: 'Spend 100 PHORSE tokens',
+    description: 'Spend 15000 PHORSE tokens',
     questType: 'SPEND_PHORSE',
     reward: [
-      { type: 'phorse', amount: 50 },
+      { type: 'shards', amount: 800 },
       { type: 'medals', amount: 15 },
     ],
-    questsToComplete: 100,
+    questsToComplete: 15000,
     difficulty: 'SIMPLE',
     isDailyQuest: true,
-    horsesToUnlock: 0,
+    horsesToUnlock: 10,
   },
 
   // 9. EARN_PHORSE
   {
     id: 9,
     title: 'Money Maker',
-    description: 'Earn 200 PHORSE tokens',
+    description: 'Earn 7000 PHORSE tokens',
     questType: 'EARN_PHORSE',
     reward: [
-      { type: 'phorse', amount: 100 },
-      { type: 'medals', amount: 20 },
+      { type: 'shards', amount: 100 },
+      { type: 'item', itemName: 'Maneki-Neko', amount: 1}
     ],
-    questsToComplete: 200,
+    questsToComplete: 7000,
     difficulty: 'SIMPLE',
     isDailyQuest: true,
     horsesToUnlock: 0,
@@ -150,8 +145,8 @@ export const QUEST_SEED_DATA = [
     description: 'Upgrade an item',
     questType: 'UPGRADE_ITEMS',
     reward: [
-      { type: 'phorse', amount: 150 },
-      { type: 'medals', amount: 15 },
+      { type: 'phorse', amount: 1000 },
+      { type: 'shards', amount: 150 },
     ],
     questsToComplete: 1,
     difficulty: 'SIMPLE',
@@ -166,8 +161,7 @@ export const QUEST_SEED_DATA = [
     description: 'Recycle an item for resources',
     questType: 'RECYCLE_ITEMS',
     reward: [
-      { type: 'phorse', amount: 75 },
-      { type: 'medals', amount: 10 },
+      { type: 'shards', amount: 75 },
     ],
     questsToComplete: 1,
     difficulty: 'SIMPLE',
@@ -175,23 +169,23 @@ export const QUEST_SEED_DATA = [
     horsesToUnlock: 0,
   },
 
-/*   // 12. RESTORE_ENERGY
+
+/*     // 12. RESTORE_ENERGY
   {
     id: 12,
     title: 'Energy Boost',
-    description: 'Restore horse energy for the first time',
+    description: 'Restore any horse energy',
     questType: 'RESTORE_ENERGY',
     reward: [
-      { type: 'phorse', amount: 50 },
+      { type: 'shards', amount: 125 },
       { type: 'medals', amount: 5 },
     ],
     questsToComplete: 1,
     difficulty: 'SIMPLE',
-    isDailyQuest: false,
-    horsesToUnlock: 1,
+    isDailyQuest: true,
+    horsesToUnlock: 10,
   },
-
-  // 13. CLAIM_REWARDS
+// 13. CLAIM_REWARDS
   {
     id: 13,
     title: 'Reward Collector',

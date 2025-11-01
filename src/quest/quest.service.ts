@@ -4,10 +4,24 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateQuestDto } from './dto/create-quest.dto';
 import { QuestType, getNextMidnightUTC, isPastMidnightUTC } from './quest.types';
 import { QUEST_SEED_DATA } from '../data/quests';
+import { items as ITEM_DEFS } from '../data/items';
+
+type ItemDef = (typeof ITEM_DEFS)[keyof typeof ITEM_DEFS];
+
+function resolveItemDef(rawName: string): ItemDef | null {
+  if (!rawName) return null;
+
+  // exact match first
+  if (ITEM_DEFS[rawName]) return ITEM_DEFS[rawName];
+
+  // case-insensitive match as fallback
+  const key = Object.keys(ITEM_DEFS).find(k => k.toLowerCase() === rawName.toLowerCase());
+  return key ? ITEM_DEFS[key] : null;
+}
 
 @Injectable()
 export class QuestService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async createQuest(dto: CreateQuestDto) {
     const difficulty = this.getDifficultyFromId(dto.id);
@@ -172,30 +186,30 @@ export class QuestService {
       throw new BadRequestException('You must own at least one horse to claim quest rewards');
     }
 
-    // Check ownership duration for anti-exploit protection
-    const now = new Date();
-    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
-    const recentlyAcquiredHorses = horses.filter((horse) => {
-      // If ownedSince is null, treat it as recently acquired for safety
-      if (!horse.ownedSince) {
-        return true;
-      }
-      return horse.ownedSince > twentyFourHoursAgo;
-    });
-
-    if (recentlyAcquiredHorses.length > 0) {
-      // Log security event for monitoring
-      console.warn(
-        `[SECURITY] Quest claim blocked for user ${user.wallet} (${user.id}). ` +
-        `Recently acquired horses: ${recentlyAcquiredHorses.map(h => h.tokenId).join(', ')}`
-      );
-
-      throw new ForbiddenException(
-        'Quest rewards cannot be claimed within 24 hours of acquiring a new horse. ' +
-        'This is to prevent exploitation. Please try again later.'
-      );
-    }
+    /*     // Check ownership duration for anti-exploit protection
+        const now = new Date();
+        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    
+        const recentlyAcquiredHorses = horses.filter((horse) => {
+          // If ownedSince is null, treat it as recently acquired for safety
+          if (!horse.ownedSince) {
+            return true;
+          }
+          return horse.ownedSince > twentyFourHoursAgo;
+        });
+    
+        if (recentlyAcquiredHorses.length > 0) {
+          // Log security event for monitoring
+          console.warn(
+            `[SECURITY] Quest claim blocked for user ${user.wallet} (${user.id}). ` +
+            `Recently acquired horses: ${recentlyAcquiredHorses.map(h => h.tokenId).join(', ')}`
+          );
+    
+          throw new ForbiddenException(
+            'Quest rewards cannot be claimed within 24 hours of acquiring a new horse. ' +
+            'This is to prevent exploitation. Please try again later.'
+          );
+        } */
 
     const rewards = quest.reward as Array<{
       type: string;
@@ -238,15 +252,29 @@ export class QuestService {
               medals: { increment: reward.amount },
             },
           });
-        } else if (reward.type === 'item' && reward.itemName) {
-          await tx.item.create({
+        } else if (reward.type === 'shards') {
+          await tx.user.update({
+            where: { id: user.id },
             data: {
-              ownerId: user.id,
-              name: reward.itemName,
-              value: 0,
-              breakable: false,
+              shards: { increment: reward.amount },
             },
           });
+        } else if (reward.type === 'item' && reward.itemName) {
+          const def = resolveItemDef(reward.itemName);
+          if (!def) {
+            throw new BadRequestException(`Unknown item "${reward.itemName}" in quest reward`);
+          }
+
+          // Build payload using definition; only include props that exist
+          const data: any = {
+            ownerId: user.id,
+            name: def.name,                 // canonical name
+            value: 1,                       // keep your current default
+            uses: def.uses ?? 1,
+            breakable: def.breakable,
+          };
+
+          await tx.item.create({ data });
         }
       }
     });
@@ -307,7 +335,7 @@ export class QuestService {
         success: true,
         streak: newStreak,
         totalCheckins: checkin.totalCheckins + 1,
-        reward: { phorse: 50, medals: 10 },
+        reward: { shards: 250 },
       };
     } else {
       await this.prisma.dailyCheckin.create({
@@ -325,7 +353,7 @@ export class QuestService {
         success: true,
         streak: 1,
         totalCheckins: 1,
-        reward: { phorse: 50, medals: 10 },
+        reward: { shards: 250 },
       };
     }
   }
