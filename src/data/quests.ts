@@ -2,8 +2,8 @@ export const QUEST_SEED_DATA = [
   // 1. DAILY_CHECKIN
   {
     id: 1,
-    title: 'Daily Check-in',
-    description: 'Log in to the game daily to claim your rewards',
+    title: 'Daily Checkin',
+    description: 'Log in to the game daily',
     questType: 'DAILY_CHECKIN',
     reward: [
       { type: 'phorse', amount: 50 },
@@ -15,7 +15,7 @@ export const QUEST_SEED_DATA = [
     horsesToUnlock: 0,
   },
 
-  // 2. WIN_RACES
+/*   // 2. WIN_RACES
   {
     id: 2,
     title: 'First Victory',
@@ -29,13 +29,13 @@ export const QUEST_SEED_DATA = [
     difficulty: 'SIMPLE',
     isDailyQuest: false,
     horsesToUnlock: 1,
-  },
+  }, */
 
   // 3. RUN_RACES
   {
     id: 3,
     title: 'First Race',
-    description: 'Complete your first race (any position)',
+    description: 'Complete your first race',
     questType: 'RUN_RACES',
     reward: [
       { type: 'phorse', amount: 75 },
@@ -43,11 +43,11 @@ export const QUEST_SEED_DATA = [
     ],
     questsToComplete: 1,
     difficulty: 'SIMPLE',
-    isDailyQuest: false,
+    isDailyQuest: true,
     horsesToUnlock: 1,
   },
 
-  // 4. BREED_HORSES
+/*   // 4. BREED_HORSES
   {
     id: 4,
     title: 'First Breed',
@@ -61,13 +61,13 @@ export const QUEST_SEED_DATA = [
     difficulty: 'SIMPLE',
     isDailyQuest: false,
     horsesToUnlock: 2,
-  },
+  }, */
 
   // 5. LEVEL_UP_HORSES
   {
     id: 5,
-    title: 'First Level Up',
-    description: 'Level up any horse to the next level',
+    title: 'Level Up',
+    description: 'Level up any horse',
     questType: 'LEVEL_UP_HORSES',
     reward: [
       { type: 'phorse', amount: 150 },
@@ -75,11 +75,11 @@ export const QUEST_SEED_DATA = [
     ],
     questsToComplete: 1,
     difficulty: 'SIMPLE',
-    isDailyQuest: false,
+    isDailyQuest: true,
     horsesToUnlock: 1,
   },
 
-  // 6. EQUIP_ITEMS
+/*   // 6. EQUIP_ITEMS
   {
     id: 6,
     title: 'First Equipment',
@@ -93,7 +93,7 @@ export const QUEST_SEED_DATA = [
     difficulty: 'SIMPLE',
     isDailyQuest: false,
     horsesToUnlock: 1,
-  },
+  }, */
 
   // 7. OPEN_CHESTS
   {
@@ -107,7 +107,7 @@ export const QUEST_SEED_DATA = [
     ],
     questsToComplete: 1,
     difficulty: 'SIMPLE',
-    isDailyQuest: false,
+    isDailyQuest: true,
     horsesToUnlock: 0,
   },
 
@@ -123,7 +123,7 @@ export const QUEST_SEED_DATA = [
     ],
     questsToComplete: 100,
     difficulty: 'SIMPLE',
-    isDailyQuest: false,
+    isDailyQuest: true,
     horsesToUnlock: 0,
   },
 
@@ -131,7 +131,7 @@ export const QUEST_SEED_DATA = [
   {
     id: 9,
     title: 'Money Maker',
-    description: 'Earn 200 PHORSE tokens from activities',
+    description: 'Earn 200 PHORSE tokens',
     questType: 'EARN_PHORSE',
     reward: [
       { type: 'phorse', amount: 100 },
@@ -139,7 +139,7 @@ export const QUEST_SEED_DATA = [
     ],
     questsToComplete: 200,
     difficulty: 'SIMPLE',
-    isDailyQuest: false,
+    isDailyQuest: true,
     horsesToUnlock: 0,
   },
 
@@ -147,7 +147,7 @@ export const QUEST_SEED_DATA = [
   {
     id: 10,
     title: 'First Upgrade',
-    description: 'Upgrade an item for the first time',
+    description: 'Upgrade an item',
     questType: 'UPGRADE_ITEMS',
     reward: [
       { type: 'phorse', amount: 150 },
@@ -155,7 +155,7 @@ export const QUEST_SEED_DATA = [
     ],
     questsToComplete: 1,
     difficulty: 'SIMPLE',
-    isDailyQuest: false,
+    isDailyQuest: true,
     horsesToUnlock: 0,
   },
 
@@ -171,11 +171,11 @@ export const QUEST_SEED_DATA = [
     ],
     questsToComplete: 1,
     difficulty: 'SIMPLE',
-    isDailyQuest: false,
+    isDailyQuest: true,
     horsesToUnlock: 0,
   },
 
-  // 12. RESTORE_ENERGY
+/*   // 12. RESTORE_ENERGY
   {
     id: 12,
     title: 'Energy Boost',
@@ -205,5 +205,5 @@ export const QUEST_SEED_DATA = [
     difficulty: 'SIMPLE',
     isDailyQuest: false,
     horsesToUnlock: 0,
-  },
+  }, */
 ];

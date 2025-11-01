@@ -105,7 +105,7 @@ export class QuestService {
         return a.quest.id - b.quest.id;
       }
       // Incomplete quests come before completed quests
-      return a.completed ? 1 : -1;
+      return a.completed ? -1 : 1;
     });
   }
 
