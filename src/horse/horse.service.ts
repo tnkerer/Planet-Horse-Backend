@@ -694,7 +694,7 @@ export class HorseService {
       const tokenReward = (hasJinDaRat && position > 5) ? 0 : rawPhorse; // ← your existing "phorse" reward
 
       // Optional: capture WRON separately (small & capped; no multipliers applied here)
-      const wronTemptative = parseFloat(Math.max((wronBase * (baseMod / 8)), wronBase).toFixed(2)); // keep as-is for now
+      const wronTemptative = parseFloat(Math.max((wronBase * (baseMod / 4)), wronBase).toFixed(2)); // keep as-is for now
 
       let wronReward = 0;
       if (wronTemptative > 0) {
@@ -1067,7 +1067,7 @@ export class HorseService {
         const tokenReward = (hasJinDaRat && position > 5) ? 0 : rawPhorse;
 
         // Optional: keep WRON separate for now
-        const wronTemptative = parseFloat(Math.max((wronBase * (baseMod / 8)), wronBase).toFixed(2));
+        const wronTemptative = parseFloat(Math.max((wronBase * (baseMod / 4)), wronBase).toFixed(2));
 
         let wronReward = 0;
         if (wronTemptative > 0) {
