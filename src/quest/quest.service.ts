@@ -516,6 +516,7 @@ export class QuestService {
       data: {
         progress: 0,
         completed: false,
+        claimed: false,
         completedAt: null,
         expiresAt: getNextMidnightUTC(),
       },

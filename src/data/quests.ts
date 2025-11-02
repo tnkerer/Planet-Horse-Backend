@@ -56,7 +56,7 @@ export const QUEST_SEED_DATA = [
     ],
     questsToComplete: 10,
     difficulty: 'SIMPLE',
-    isDailyQuest: false,
+    isDailyQuest: true,
     horsesToUnlock: 5,
   },
 
