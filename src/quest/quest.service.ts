@@ -495,34 +495,32 @@ export class QuestService {
   }
 
   /**
-   * Cron job that runs daily at 00:00 UTC
+   * Cron job that runs daily at 00:30 UTC
    * Resets all unclaimed daily quests (progress goes to 0, but quests remain visible)
    */
-  @Cron('0 0 * * *', {
-    timeZone: 'UTC',
-  })
+  @Cron('5 0 * * *', { timeZone: 'UTC' })
   async resetDailyQuests() {
     const now = new Date();
+    const nextMidnight = getNextMidnightUTC(); // still points to the next 00:00 UTC
 
-    // Reset all unclaimed daily quest progress (only affects quests with isDailyQuest: true)
-    // Note: Only daily quests have expiresAt set, so this only affects daily quests
     const result = await this.prisma.userQuest.updateMany({
       where: {
-        expiresAt: {
-          lte: now,
-        },
-        claimed: false,
+        expiresAt: { lte: now },          // keep the “expired” guard
+        quest: { is: { isDailyQuest: true } }, // only quests whose Quest.isDailyQuest = true
       },
       data: {
         progress: 0,
         completed: false,
         claimed: false,
         completedAt: null,
-        expiresAt: getNextMidnightUTC(),
+        expiresAt: nextMidnight,          // reset to the next midnight UTC
       },
     });
 
-    console.log(`[Quest System] Daily reset completed at ${now.toISOString()}. Reset ${result.count} unclaimed daily quests.`);
+    console.log(
+      `[Quest System] Daily reset completed at ${now.toISOString()}. ` +
+      `Reset ${result.count} unclaimed daily quests.`
+    );
   }
 
   private getDifficultyFromId(id: number): string {

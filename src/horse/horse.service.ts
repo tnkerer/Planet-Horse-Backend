@@ -103,40 +103,61 @@ function samplePosition(dist: number[], rng: () => number = Math.random): number
   return 6; // fallback
 }
 
+const PHORSE_POSITION_RANGES: Record<number, readonly [number, number]> = {
+  1: [180, 100],
+  2: [170, 90],
+  3: [160, 80],
+  4: [100, 70],
+  5: [90, 60],
+  6: [80, 50],
+  7: [70, 40],
+  8: [60, 30],
+  9: [50, 0],
+  10: [40, 0],
+};
+
 type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary' | 'Mythic';
 
 function rollRewards(
   position: number,
   rewardsCfg: Record<string, readonly [number, number]>,
-  opts?: { level?: number; levelCap?: number; rarity?: Rarity }
+  opts?: {
+    level?: number;
+    levelCap?: number;
+    rarity?: Rarity;
+    wronAvailable?: number;
+  }
 ) {
   // XP unchanged (from table)
   const xpBase = rewardsCfg[position.toString()][0];
 
   // Clamp pos into [1..10]
   const pos = Math.min(10, Math.max(1, position));
-  const lerp = (hi: number, lo: number, t: number) => hi + (lo - hi) * t;
   const t = (pos - 1) / 9; // 0 at P1, 1 at P10
+  const lerp = (hi: number, lo: number, u: number) => hi + (lo - hi) * u;
 
-  // ── WRON (UNCHANGED) ────────────────────────────────────────────────────────
-  const wronProb = lerp(0.03, 0.002, t);
+  const wronProbBase = lerp(0.03, 0.002, t);   // P1≈3% → P10≈0.2%
   const wronMin = 0.1;
   const wronMax = 4;
-  const wronJackpotProb = lerp(0.002, 0.0003, t);
+  const wronJackpotProb = lerp(0.002, 0.0003, t); // P1≈0.2% → P10≈0.03%
 
-  // ── PHORSE base range (position only baseline) ──────────────────────────────
-  let phorseMin = lerp(20, 5, t);     // P1≈20 → P10≈5  (baseline)
-  let phorseMax = lerp(200, 40, t);   // P1≈200 → P10≈40 (baseline)
-  let phorseJackpotProb = lerp(0.004, 0.0005, t); // baseline very-hard
+  const hasWronLiquidity = (opts?.wronAvailable ?? 0) > 0;
+  const shouldTryWRON = hasWronLiquidity && (Math.random() < wronProbBase);
 
-  // ── NEW: Level widens PHORSE range (min & max), rarity boosts JACKPOT only ─
+  // ── PHORSE base range: now comes from the position table ────────────────────
+  const [baseMax, baseMin] = PHORSE_POSITION_RANGES[pos] ?? [60, 30];
+  let phorseMin = baseMin;
+  let phorseMax = baseMax;
+
+  // Baseline very-hard jackpot odds still scale with position
+  let phorseJackpotProb = lerp(0.004, 0.0005, t); // 0.4% → 0.05%
+
+  // ── Level widens PHORSE range (min & max) ───────────────────────────────────
   const level = Math.max(1, opts?.level ?? 1);
   const levelCap = Math.max(level, opts?.levelCap ?? 100);
-  // Normalized level in [0..1]; ease a bit so progress is felt early without exploding:
   const n = Math.max(0, Math.min(1, level / levelCap));
   const nEase = Math.pow(n, 0.65); // gentle concave curve
 
-  // Scale BOTH min & max with level (PHORSE ONLY)
   // Tunable: up to +60% on min and +120% on max at cap.
   const minLevelMul = 1 + 0.60 * nEase;
   const maxLevelMul = 1 + 1.20 * nEase;
@@ -145,7 +166,7 @@ function rollRewards(
   phorseMax *= maxLevelMul;
   if (phorseMax < phorseMin) phorseMax = phorseMin;
 
-  // Rarity → jackpot multiplier ONLY (PHORSE ONLY)
+  // ── Rarity boosts PHORSE jackpot *only* ─────────────────────────────────────
   const rarityToJPMul: Record<Rarity, number> = {
     Common: 1.00,
     Uncommon: 1.10,
@@ -155,7 +176,6 @@ function rollRewards(
     Mythic: 2.20,
   };
   const rMul = rarityToJPMul[(opts?.rarity as Rarity) ?? 'Common'] ?? 1.0;
-
   phorseJackpotProb = Math.min(0.01, phorseJackpotProb * rMul); // hard cap @ 1%
 
   // ── Roller ──────────────────────────────────────────────────────────────────
@@ -166,19 +186,19 @@ function rollRewards(
     return { reward, jackpot };
   };
 
-  // Decide currency (mutually exclusive)
-  const rollWRON = Math.random() < wronProb;
-
-  if (rollWRON) {
+  // ── Decide currency with WRON-availability fallback ─────────────────────────
+  if (shouldTryWRON) {
     const { reward, jackpot } = rollWithJackpot(wronMin, wronMax, wronJackpotProb);
     const wronBase = reward;
-    return { xpBase, phorseBase: 0, wronBase, jackpot };
-  } else {
-    const { reward, jackpot } = rollWithJackpot(phorseMin, phorseMax, phorseJackpotProb);
-    const phorseBase = reward;
-    return { xpBase, phorseBase, wronBase: 0, jackpot };
+    return { xpBase, phorseBase: 0, wronBase, jackpot, currency: 'WRON' as const };
   }
+
+  // Fallback (or intended) PHORSE path
+  const { reward, jackpot } = rollWithJackpot(phorseMin, phorseMax, phorseJackpotProb);
+  const phorseBase = reward;
+  return { xpBase, phorseBase, wronBase: 0, jackpot, currency: 'PHORSE' as const };
 }
+
 
 
 @Injectable()
@@ -691,7 +711,7 @@ export class HorseService {
 
       // PHORSE path (keeps your existing multipliers)
       const rawPhorse = parseFloat((Math.max(phorseBase * baseMod, phorseBase) * Number(totalModifier.phorseMultiplier)).toFixed(2));
-      const tokenReward = (hasJinDaRat && position > 5) ? 0 : rawPhorse; // ← your existing "phorse" reward
+      let tokenReward = (hasJinDaRat && position > 5) ? 0 : rawPhorse; // ← your existing "phorse" reward
 
       // Optional: capture WRON separately (small & capped; no multipliers applied here)
       const wronTemptative = parseFloat(Math.max((wronBase * (baseMod / 8)), wronBase).toFixed(2)); // keep as-is for now
@@ -701,12 +721,17 @@ export class HorseService {
         const { allocateWron } = await import('../utils/wron');  // or a top import
         const { granted } = await allocateWron(tx, wronTemptative);
         wronReward = granted;
+
+        if (granted === 0 && tokenReward === 0) {
+          const fallbackPhorse = Math.max(1, Math.min(rawPhorse, phorseBase));
+          tokenReward = parseFloat(fallbackPhorse.toFixed(2));
+        }
       }
 
       // console.log({ tokenReward, wronReward, jackpot })
 
-      const medalReward = position === 1 ? 1 :
-        position === 2 ? 1 :
+      const medalReward = position === 1 ? 3 :
+        position === 2 ? 2 :
           position === 3 ? 1 : 0;
 
       const newEnergy = horse.currentEnergy - energySpent;
@@ -965,13 +990,13 @@ export class HorseService {
         perHorseShardCost[h.tokenId] = c;
         totalShardCost += c;
       }
-      const dec = await tx.user.updateMany({
+      /* const dec = await tx.user.updateMany({
         where: { id: user.id, shards: { gte: totalShardCost } },
         data: { shards: { decrement: totalShardCost } },
       });
       if (dec.count !== 1) {
         throw new BadRequestException(`Not enough SHARDS: need ${totalShardCost}`);
-      }
+      } */
 
       // Prepare accumulators
       type RawResult = {
@@ -1064,7 +1089,7 @@ export class HorseService {
 
         // PHORSE path (same multipliers)
         const rawPhorse = parseFloat((Math.max(phorseBase * baseMod, phorseBase) * Number(mods.phorseMultiplier)).toFixed(2));
-        const tokenReward = (hasJinDaRat && position > 5) ? 0 : rawPhorse;
+        let tokenReward = (hasJinDaRat && position > 5) ? 0 : rawPhorse;
 
         // Optional: keep WRON separate for now
         const wronTemptative = parseFloat(Math.max((wronBase * (baseMod / 8)), wronBase).toFixed(2));
@@ -1074,12 +1099,17 @@ export class HorseService {
           const { allocateWron } = await import('../utils/wron');  // or a top import
           const { granted } = await allocateWron(tx, wronTemptative);
           wronReward = granted;
+
+          if (granted === 0 && tokenReward === 0) {
+            const fallbackPhorse = Math.max(1, Math.min(rawPhorse, phorseBase));
+            tokenReward = parseFloat(fallbackPhorse.toFixed(2));
+          }
         }
 
         // console.log({ tokenReward, wronReward, jackpot })
 
-        const medalReward = position === 1 ? 1 :
-          position === 2 ? 1 :
+        const medalReward = position === 1 ? 3 :
+          position === 2 ? 2 :
             position === 3 ? 1 : 0;
 
         // c) post-race status
@@ -1193,8 +1223,6 @@ export class HorseService {
           })
       );
 
-      const horseIdByToken = new Map(horses.map(h => [h.tokenId, h.id]));
-
       // 4) Batch all writes
       // Precompute per-horse energySpent so guards are correct
       const energySpentByToken: Record<string, number> = {};
@@ -1219,22 +1247,25 @@ export class HorseService {
       const earnedDelta = rawResults.reduce((s, r) => s + r.tokenReward, 0);
       const burnDelta = totalCost;
 
+      const userUpd = await tx.user.updateMany({
+        where: { id: user.id, shards: { gte: totalShardCost } },
+        data: {
+          shards: { decrement: totalShardCost },
+          phorse: { increment: phorseDelta },
+          wron: { increment: wronDelta },
+          medals: { increment: medalsDelta },
+          totalPhorseSpent: { increment: spentDelta },
+          totalPhorseEarned: { increment: earnedDelta },
+          burnScore: { increment: burnDelta },
+          ...(user.lastRace ? {} : { lastRace: new Date() }),
+        },
+      });
+      if (userUpd.count !== 1) {
+        throw new BadRequestException(`Not enough SHARDS: need ${totalShardCost}`);
+      }
+
       // 4) Batch all writes
       await Promise.all([
-        // user
-        tx.user.update({
-          where: { id: user.id },
-          data: {
-            phorse: { increment: phorseDelta },
-            wron: { increment: wronDelta },
-            medals: { increment: medalsDelta },
-            totalPhorseSpent: { increment: spentDelta },
-            totalPhorseEarned: { increment: earnedDelta },
-            burnScore: { increment: burnDelta },
-            ...(user.lastRace ? {} : { lastRace: new Date() }),
-          },
-        }),
-        // horses
         Promise.all(itemUsageOps),
         Promise.all(rawResults.map(r =>
           tx.horse.update({

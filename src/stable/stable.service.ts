@@ -1,10 +1,11 @@
-import { BadRequestException, Injectable, NotFoundException, Inject, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Inject, ForbiddenException, forwardRef } from '@nestjs/common';
 import { Prisma, TransactionStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { STABLE_LEVELS, STABLE_UPGRADE_HOURS, type StableLevel } from 'src/data/stables';
 import type { Cache } from 'cache-manager';
 import Moralis from 'moralis';
+import { QuestService } from 'src/quest/quest.service';
 
 type SalePhase = 'GTD' | 'FCFS';
 
@@ -19,7 +20,8 @@ const CHAIN_ID = 2020;
 export class StableService {
     constructor(
         private readonly prisma: PrismaService,
-        @Inject(CACHE_MANAGER) private readonly cache: Cache
+        @Inject(CACHE_MANAGER) private readonly cache: Cache,
+        @Inject(forwardRef(() => QuestService)) private readonly questService: QuestService,
     ) { }
 
     private static inFlight = new Map<string, Promise<string[]>>();
@@ -315,71 +317,63 @@ export class StableService {
         if (!user) throw new NotFoundException('User not found');
         const userId = user.id;
 
-        // We’ll do all checks & mutations atomically
-        return this.prisma.$transaction(async (tx) => {
+        // All checks & mutations atomically
+        const result = await this.prisma.$transaction(async (tx) => {
             // Load the stable (ownership + state)
             const stable = await tx.stable.findFirst({
                 where: { tokenId, userId },
                 select: { id: true, level: true, upgrading: true },
             });
-            if (!stable) {
-                // hide existence details to non-owners
-                throw new NotFoundException('Stable not found');
-            }
-            if (stable.level >= 4) {
-                throw new BadRequestException('Stable is already at max level');
-            }
-            if (stable.upgrading) {
-                throw new BadRequestException('Stable is already upgrading');
-            }
+            if (!stable) throw new NotFoundException('Stable not found'); // hide details to non-owners
+            if (stable.level >= 4) throw new BadRequestException('Stable is already at max level');
+            if (stable.upgrading) throw new BadRequestException('Stable is already upgrading');
 
             const nextLevel = (stable.level + 1) as 2 | 3 | 4;
             const cost = STABLE_LEVELS[nextLevel].upgradeCostPhorse;
 
             // 1) Mark upgrading (guard against races)
             const marked = await tx.$queryRaw<Array<{ upgradeStarted: Date }>>`
-              UPDATE "Stable"
-              SET "upgrading" = TRUE,
-                  "upgradeStarted" = NOW(),
-                  "updatedAt" = NOW()
-              WHERE "id" = ${stable.id}
-                AND "userId" = ${userId}
-                AND "upgrading" = FALSE
-                AND "level" = ${stable.level}
-                AND "level" < 4
-              RETURNING "upgradeStarted"
-            `;
+      UPDATE "Stable"
+      SET "upgrading" = TRUE,
+          "upgradeStarted" = NOW(),
+          "updatedAt" = NOW()
+      WHERE "id" = ${stable.id}
+        AND "userId" = ${userId}
+        AND "upgrading" = FALSE
+        AND "level" = ${stable.level}
+        AND "level" < 4
+      RETURNING "upgradeStarted"
+    `;
             if (marked.length === 0) {
                 throw new BadRequestException('Unable to start upgrade (race or invalid state)');
             }
             const startedAt = marked[0].upgradeStarted;
 
             // 2) Deduct PHORSE atomically (guard balance)
-            //    If this fails (0 rows), the whole txn is rolled back so "upgrading" won't stick.
             const deducted = await tx.$executeRaw`
-              UPDATE "User"
-              SET "phorse" = "phorse" - ${cost}
-              WHERE "id" = ${userId}
-                AND "phorse" >= ${cost}
-            `;
-
+      UPDATE "User"
+      SET "phorse" = "phorse" - ${cost}
+      WHERE "id" = ${userId}
+        AND "phorse" >= ${cost}
+    `;
             if ((deducted as number) === 0) {
-                // Revert by throwing; txn will roll back the stable flag as well
+                // Throwing rolls back the "upgrading" flag as well
                 throw new BadRequestException('Insufficient PHORSE to start upgrade');
             }
 
+            // 3) Track total PHORSE spent (same txn)
             const newTotalSpent = await tx.$executeRaw`
-                Update "User"
-                SET "totalPhorseSpent" = "totalPhorseSpent" + ${cost}
-                WHERE "id" = ${userId}
-            `;
-
+      UPDATE "User"
+      SET "totalPhorseSpent" = "totalPhorseSpent" + ${cost}
+      WHERE "id" = ${userId}
+    `;
             if ((newTotalSpent as number) === 0) {
-                throw new BadRequestException('Something Went Wrong while updating stable');
+                throw new BadRequestException('Something went wrong while updating totals');
             }
 
             const { eta, secondsLeft } = this.computeEta(startedAt, stable.level);
 
+            // Return everything needed for the post-txn quest update
             return {
                 tokenId,
                 levelFrom: stable.level,
@@ -389,12 +383,37 @@ export class StableService {
                 eta,
                 secondsLeft,
                 upgrading: true,
+                userId, // include for convenience
             };
         }, {
             isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
             maxWait: 8000,
             timeout: 15000,
         });
+
+        // ---- Quest progression: track PHORSE spent on upgrade (non-blocking) ----
+        try {
+            const { QuestType } = await import('../quest/quest.types');
+            await this.questService.incrementQuestProgress(
+                result.userId,
+                QuestType.SPEND_PHORSE,
+                result.cost
+            );
+        } catch (err) {
+            console.error('Failed to update quest progress for startUpgrade:', err);
+            // Do not throw; upgrade already started successfully.
+        }
+
+        return {
+            tokenId: result.tokenId,
+            levelFrom: result.levelFrom,
+            levelTo: result.levelTo,
+            cost: result.cost,
+            startedAt: result.startedAt,
+            eta: result.eta,
+            secondsLeft: result.secondsLeft,
+            upgrading: result.upgrading,
+        };
     }
 
     // ---------- UPGRADE: status/eta ----------
