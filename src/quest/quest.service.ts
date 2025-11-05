@@ -19,6 +19,22 @@ function resolveItemDef(rawName: string): ItemDef | null {
   return key ? ITEM_DEFS[key] : null;
 }
 
+function windowStartUtc(d: Date): Date {
+  // returns the 00:05:00 UTC anchor for the day of `d`
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 5, 0, 0));
+}
+function tomorrowWindowStartUtc(d: Date): Date {
+  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1, 0, 5, 0, 0));
+  return t;
+}
+function utcDayKey(d: Date): string {
+  // YYYY-MM-DD in UTC (for streak calc)
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 @Injectable()
 export class QuestService {
   constructor(private prisma: PrismaService) { }
@@ -293,51 +309,30 @@ export class QuestService {
   }
 
   async dailyCheckin(wallet: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { wallet },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
+    const user = await this.prisma.user.findUnique({ where: { wallet } });
+    if (!user) throw new NotFoundException('User not found');
 
     const now = new Date();
+    const todayWindow = windowStartUtc(now);           // today's 00:05 UTC
+    const nextWindow = now < todayWindow
+      ? todayWindow                                      // later today at 00:05
+      : tomorrowWindowStartUtc(now);                     // tomorrow 00:05 UTC
+
     const checkin = await this.prisma.dailyCheckin.findUnique({
       where: { userId: user.id },
     });
 
-    if (checkin) {
-      const hoursSinceLastCheckin =
-        (now.getTime() - checkin.lastCheckinAt.getTime()) / (1000 * 60 * 60);
-
-      if (hoursSinceLastCheckin < 24) {
-        const hoursRemaining = 24 - hoursSinceLastCheckin;
+    // First-time checkin
+    if (!checkin) {
+      // Only allow if we're past today's window start
+      if (now < todayWindow) {
+        const ms = todayWindow.getTime() - now.getTime();
+        const hrs = ms / 3_600_000;
         throw new ForbiddenException(
-          `Check-in cooldown active. ${hoursRemaining.toFixed(1)} hours remaining`
+          `Check-in cooldown active. ${hrs.toFixed(1)} hours remaining`
         );
       }
 
-      const isConsecutiveDay = hoursSinceLastCheckin < 48;
-      const newStreak = isConsecutiveDay ? checkin.streak + 1 : 1;
-
-      await this.prisma.dailyCheckin.update({
-        where: { userId: user.id },
-        data: {
-          lastCheckinAt: now,
-          streak: newStreak,
-          totalCheckins: { increment: 1 },
-        },
-      });
-
-      await this.incrementQuestProgress(user.id, QuestType.DAILY_CHECKIN);
-
-      return {
-        success: true,
-        streak: newStreak,
-        totalCheckins: checkin.totalCheckins + 1,
-        reward: { shards: 250 },
-      };
-    } else {
       await this.prisma.dailyCheckin.create({
         data: {
           userId: user.id,
@@ -356,43 +351,96 @@ export class QuestService {
         reward: { shards: 250 },
       };
     }
+
+    // Has prior checkin:
+    // Rule: exactly one checkin per UTC day (window opens at 00:05).
+    // If the last checkin was **on or after** today's window, user has already checked in today.
+    if (checkin.lastCheckinAt >= todayWindow) {
+      // next allowed is nextWindow (tomorrow 00:05, or today 00:05 if we’re before it)
+      const ms = nextWindow.getTime() - now.getTime();
+      const hrs = ms / 3_600_000;
+      throw new ForbiddenException(
+        `Check-in cooldown active. ${Math.max(0, hrs).toFixed(1)} hours remaining`
+      );
+    }
+
+    // If we are before today's window, user must wait until today 00:05 UTC
+    if (now < todayWindow) {
+      const ms = todayWindow.getTime() - now.getTime();
+      const hrs = ms / 3_600_000;
+      throw new ForbiddenException(
+        `Check-in cooldown active. ${hrs.toFixed(1)} hours remaining`
+      );
+    }
+
+    // Eligible: we are past today's window and lastCheckin was before it (i.e., not today)
+    // Streak: compare UTC day keys of lastCheckinAt and now
+    const lastKey = utcDayKey(checkin.lastCheckinAt);
+    const todayKey = utcDayKey(now);
+
+    // Compute yesterday's UTC key for streak check
+    const yesterday = new Date(Date.UTC(
+      now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1
+    ));
+    const yKey = utcDayKey(yesterday);
+
+    const isConsecutiveDay = (lastKey === yKey);
+    const newStreak = isConsecutiveDay ? checkin.streak + 1 : 1;
+
+    await this.prisma.dailyCheckin.update({
+      where: { userId: user.id },
+      data: {
+        lastCheckinAt: now,
+        streak: newStreak,
+        totalCheckins: { increment: 1 },
+      },
+    });
+
+    await this.incrementQuestProgress(user.id, QuestType.DAILY_CHECKIN);
+
+    return {
+      success: true,
+      streak: newStreak,
+      totalCheckins: checkin.totalCheckins + 1,
+      reward: { shards: 250 },
+    };
   }
 
   async getCheckinStatus(wallet: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { wallet },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
+    const user = await this.prisma.user.findUnique({ where: { wallet } });
+    if (!user) throw new NotFoundException('User not found');
 
     const checkin = await this.prisma.dailyCheckin.findUnique({
       where: { userId: user.id },
     });
 
+    const now = new Date();
+    const todayWindow = windowStartUtc(now);
+    const nextWindow = now < todayWindow
+      ? todayWindow
+      : tomorrowWindowStartUtc(now);
+
     if (!checkin) {
+      const canCheckin = now >= todayWindow;
       return {
-        canCheckin: true,
+        canCheckin,
         streak: 0,
         totalCheckins: 0,
         lastCheckinAt: null,
-        nextCheckinAt: null,
+        nextCheckinAt: canCheckin ? null : todayWindow,
       };
     }
 
-    const now = new Date();
-    const hoursSinceLastCheckin =
-      (now.getTime() - checkin.lastCheckinAt.getTime()) / (1000 * 60 * 60);
-    const canCheckin = hoursSinceLastCheckin >= 24;
-    const nextCheckinAt = new Date(checkin.lastCheckinAt.getTime() + 24 * 60 * 60 * 1000);
+    // Can check in if: we're past today's 00:05 and the user hasn't checked in since then.
+    const alreadyCheckedToday = checkin.lastCheckinAt >= todayWindow;
+    const canCheckin = (now >= todayWindow) && !alreadyCheckedToday;
 
     return {
       canCheckin,
       streak: checkin.streak,
       totalCheckins: checkin.totalCheckins,
       lastCheckinAt: checkin.lastCheckinAt,
-      nextCheckinAt: canCheckin ? null : nextCheckinAt,
+      nextCheckinAt: canCheckin ? null : nextWindow,
     };
   }
 

@@ -990,6 +990,7 @@ export class HorseService {
         perHorseShardCost[h.tokenId] = c;
         totalShardCost += c;
       }
+      console.log(totalShardCost)
       /* const dec = await tx.user.updateMany({
         where: { id: user.id, shards: { gte: totalShardCost } },
         data: { shards: { decrement: totalShardCost } },
