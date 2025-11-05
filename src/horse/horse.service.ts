@@ -181,7 +181,7 @@ function rollRewards(
   // ── Roller ──────────────────────────────────────────────────────────────────
   const rollWithJackpot = (min: number, max: number, jackpotProb: number) => {
     const jackpot = Math.random() < jackpotProb;
-    if (jackpot) return { reward: max, jackpot };
+    if (jackpot) return { reward: (1.5* max), jackpot };
     const reward = parseFloat((min + Math.random() * (max - min)).toFixed(2));
     return { reward, jackpot };
   };
