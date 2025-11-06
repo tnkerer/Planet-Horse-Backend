@@ -126,8 +126,7 @@ function rollRewards(
     levelCap?: number;
     rarity?: Rarity;
     wronAvailable?: number;
-  }
-) {
+  }) {
   // XP unchanged (from table)
   const xpBase = rewardsCfg[position.toString()][0];
 
@@ -181,7 +180,7 @@ function rollRewards(
   // ── Roller ──────────────────────────────────────────────────────────────────
   const rollWithJackpot = (min: number, max: number, jackpotProb: number) => {
     const jackpot = Math.random() < jackpotProb;
-    if (jackpot) return { reward: (1.5* max), jackpot };
+    if (jackpot) return { reward: (1.5 * max), jackpot };
     const reward = parseFloat((min + Math.random() * (max - min)).toFixed(2));
     return { reward, jackpot };
   };
@@ -697,6 +696,13 @@ export class HorseService {
 
       const rewardsCfg = globals['Rewards'] as Record<string, readonly [number, number]>;
       // rewards follow from position as you already do
+
+      const bank = await tx.rewardBank.findUnique({
+        where: { id: 'WRON' },
+        select: { available: true },
+      });
+      const wronAvailable = Number(bank?.available ?? 0);
+
       const { xpBase, phorseBase, wronBase, jackpot } = rollRewards(
         position,
         rewardsCfg,
@@ -704,6 +710,7 @@ export class HorseService {
           level: horse.level,
           levelCap: levelLimits[horse.rarity] ?? 100,
           rarity: horse.rarity as any, // 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary' | 'Mythic'
+          wronAvailable
         });
 
       const baseXpReward = Math.floor(xpBase * baseXpMod * (globals['Experience Multiplier'] as number));
@@ -990,7 +997,6 @@ export class HorseService {
         perHorseShardCost[h.tokenId] = c;
         totalShardCost += c;
       }
-      console.log(totalShardCost)
       /* const dec = await tx.user.updateMany({
         where: { id: user.id, shards: { gte: totalShardCost } },
         data: { shards: { decrement: totalShardCost } },
@@ -1076,6 +1082,12 @@ export class HorseService {
 
         const hasJinDaRat = horse.equipments?.some(it => it.name === 'JinDaRat');
 
+        const bank = await tx.rewardBank.findUnique({
+          where: { id: 'WRON' },
+          select: { available: true },
+        });
+        const wronAvailable = Number(bank?.available ?? 0);
+
         const { xpBase, phorseBase, wronBase, jackpot } = rollRewards(
           position,
           rewardsCfg,
@@ -1083,6 +1095,7 @@ export class HorseService {
             level: horse.level,
             levelCap: levelLimits[horse.rarity] ?? 100,
             rarity: horse.rarity as any, // 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary' | 'Mythic'
+            wronAvailable
           }
         );
         const baseXp = Math.floor(xpBase * baseXpMod * xpMultGlobal);
