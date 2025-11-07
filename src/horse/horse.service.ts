@@ -382,7 +382,8 @@ export class HorseService {
         rarity: true,
         status: true,
         equipments: true,
-        usedLevelUpTicket: true, // NEW
+        usedLevelUpTicket: true,
+        growthPotential: true,
       },
     });
     if (!horse) throw new NotFoundException('Horse not found');
@@ -422,8 +423,15 @@ export class HorseService {
 
     const rarityInfo = rarityBase[horse.rarity as keyof typeof rarityBase];
     if (!rarityInfo) throw new BadRequestException(`Invalid rarity: ${horse.rarity}`);
-    const minG = rarityInfo['Growth Min'];
-    const maxG = rarityInfo['Growth Max'];
+    let minG;
+    let maxG;
+    if (horse.growthPotential) {
+      minG = rarityInfo['Growth Max'];
+      maxG = horse.growthPotential;
+    } else {
+      minG = rarityInfo['Growth Min'];
+      maxG = rarityInfo['Growth Max'];
+    }
     const rollGrowth = () => Math.random() * (maxG - minG) + minG;
 
     const incPower = rollGrowth() * 1;
@@ -2003,5 +2011,156 @@ export class HorseService {
     });
   }
 
+  /**
+   * Ascend a horse (one-time “legacy” promotion):
+   *
+   * Guards:
+   * - Caller must exist and own the horse
+   * - Horse level >= 15
+   * - Horse.legacy must be FALSE (ascend only once)
+   *
+   * Effects:
+   * 1) basePower/baseSprint/baseSpeed += ceil( rand[0.5..1.0] * currentLevel )
+   * 2) currentPower/currentSprint/currentSpeed = new base values
+   * 3) level = 1
+   * 4) exp = 0
+   * 5) legacy = TRUE
+   * 6) growthPotential = (rarityInfo['Growth Max']) + rand[0..2)
+   * 7) upgradable = FALSE
+   * 8) careerfactor = 0
+   * 9) CLEAR RaceHistory for this horse
+   * 10) UNEQUIP ALL items from this horse (horseId = NULL)
+   */
+  async ascendHorse(
+    ownerWallet: string,
+    tokenId: string,
+  ): Promise<{
+    tokenId: string;
+    level: number;
+    exp: number;
+    legacy: boolean;
+    basePower: number;
+    baseSprint: number;
+    baseSpeed: number;
+    currentPower: number;
+    currentSprint: number;
+    currentSpeed: number;
+    growthPotential: number;
+    clearedHistoryCount: number;
+    unequippedItemsCount: number;
+  }> {
+    return this.prisma.$transaction(async (tx) => {
+      // 1) Caller user
+      const user = await tx.user.findUnique({
+        where: { wallet: ownerWallet },
+        select: { id: true },
+      });
+      if (!user) throw new NotFoundException('User not found');
 
+      // 2) Load horse (everything needed)
+      const horse = await tx.horse.findUnique({
+        where: { tokenId },
+        select: {
+          id: true,
+          ownerId: true,
+          level: true,
+          exp: true,
+          legacy: true,
+          rarity: true,
+          basePower: true,
+          baseSprint: true,
+          baseSpeed: true,
+        },
+      });
+      if (!horse) throw new NotFoundException('Horse not found');
+      if (horse.ownerId !== user.id) throw new ForbiddenException('Not your horse');
+
+      // Guards
+      if (horse.level < 15) {
+        throw new BadRequestException('Horse must be at least level 15 to ascend');
+      }
+      if (horse.legacy) {
+        throw new BadRequestException('This horse has already ascended (legacy = true)');
+      }
+
+      // 3) Rarity info for growthPotential
+      const rarityInfo = rarityBase[horse.rarity as keyof typeof rarityBase];
+      if (!rarityInfo) throw new BadRequestException(`Invalid rarity: ${horse.rarity}`);
+      const maxG = rarityInfo['Growth Max'];
+
+      // 4) Compute random base stat boosts
+      const L = horse.level;
+      const rand05to10 = () => 0.5 + Math.random() * 0.5; // [0.5, 1.0)
+      const incPower = Math.ceil(rand05to10() * L);
+      const incSprint = Math.ceil(rand05to10() * L);
+      const incSpeed = Math.ceil(rand05to10() * L);
+
+      const newBasePower = Math.ceil((horse.basePower ?? 0) + incPower);
+      const newBaseSprint = Math.ceil((horse.baseSprint ?? 0) + incSprint);
+      const newBaseSpeed = Math.ceil((horse.baseSpeed ?? 0) + incSpeed);
+
+      // current = base after ascend
+      const newCurrentPower = newBasePower;
+      const newCurrentSprint = newBaseSprint;
+      const newCurrentSpeed = newBaseSpeed;
+
+      // growthPotential = maxG + rand[0..2)
+      const growthPotential = Number((maxG + Math.random() * 2).toFixed(4));
+
+      // 5) Guarded horse update (prevents double-ascend)
+      const upd = await tx.horse.updateMany({
+        where: {
+          id: horse.id,
+          ownerId: user.id,
+          legacy: false,
+          level: { gte: 15 },
+        },
+        data: {
+          basePower: newBasePower,
+          baseSprint: newBaseSprint,
+          baseSpeed: newBaseSpeed,
+          currentPower: newCurrentPower,
+          currentSprint: newCurrentSprint,
+          currentSpeed: newCurrentSpeed,
+          level: 1,
+          exp: 0,
+          legacy: true,
+          growthPotential,
+          upgradable: false,
+          careerfactor: 0, // reset career factor
+        },
+      });
+
+      if (upd.count !== 1) {
+        throw new BadRequestException('Ascension failed: horse state changed; try again.');
+      }
+
+      // 6) Unequip all items from this horse (bypass any cooldowns on purpose)
+      const unequipRes = await tx.item.updateMany({
+        where: { horseId: horse.id },
+        data: { horseId: null },
+      });
+
+      // 7) Clear the horse’s race history
+      const delRes = await tx.raceHistory.deleteMany({
+        where: { horseId: horse.id },
+      });
+
+      return {
+        tokenId,
+        level: 1,
+        exp: 0,
+        legacy: true,
+        basePower: newBasePower,
+        baseSprint: newBaseSprint,
+        baseSpeed: newBaseSpeed,
+        currentPower: newCurrentPower,
+        currentSprint: newCurrentSprint,
+        currentSpeed: newCurrentSpeed,
+        growthPotential,
+        clearedHistoryCount: delRes.count ?? 0,
+        unequippedItemsCount: unequipRes.count ?? 0,
+      };
+    });
+  }
 }

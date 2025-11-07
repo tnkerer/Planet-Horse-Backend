@@ -115,6 +115,8 @@ model Horse {
   currentBreeds Int            @default(0)
   ownedSince    DateTime?
   maxBreeds     Int?
+  legacy        Boolean        @default(false)
+  growthPotential Float?
 
   // NEW: how many trait slots this horse may fill now (2..5)
   traitSlotsUnlocked Int @default(2)
@@ -347,6 +349,7 @@ model RaceHistory {
   horse        Horse    @relation(fields: [horseId], references: [id])
   horseId      String
   shardSpent   Float?
+  items        String[]
 
   @@index([horseId])
 }

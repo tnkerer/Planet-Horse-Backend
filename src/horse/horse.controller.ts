@@ -179,4 +179,21 @@ export class HorseController {
     return this.horseService.changeNickname(req.user.wallet, tokenId, body.nickname);
   }
 
+  /**
+  * PUT /horses/:tokenId/ascend
+  *  - One-time legacy ascension
+  *  - Requires ownership (IsOwnerGuard)
+  *  - Throttled to avoid accidental double clicks / spam
+  */
+  @UseGuards(IsOwnerGuard)
+  @Put(':tokenId/ascend')
+  @Throttle({ default: { limit: 25, ttl: 60_000 } })
+  async ascendHorse(
+    @Request() req,
+    @Param('tokenId') tokenId: string,
+  ) {
+    const ownerWallet = req.user.wallet as string;
+    return this.horseService.ascendHorse(ownerWallet, tokenId);
+  }
+
 }

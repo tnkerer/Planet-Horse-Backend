@@ -97,7 +97,8 @@ export class AppService {
 
       { trait_type: 'gen', value: horse.gen, display_type: 'number' },
       { trait_type: 'trait slots unlocked', value: horse.traitSlotsUnlocked, display_type: 'number' },
-      { trait_type: 'career factor', value: horse.careerfactor.toFixed(2), display_type: 'number'}
+      { trait_type: 'career factor', value: horse.careerfactor.toFixed(2), display_type: 'number'},
+      { trait_type: 'growth potential', value: horse.growthPotential ? `${horse.growthPotential.toFixed(2)}` : 'Unknown'}
     ];
 
     // Encode per-slot traits: "Trait Slot 1" => "Racecraft (Rare)"
