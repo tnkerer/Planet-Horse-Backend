@@ -73,7 +73,6 @@ export class HorseController {
     return this.horseService.startRace(ownerWallet, tokenId);
   }
 
-  @UseGuards(IsMultipleOwnerGuard)
   @Put('start-multiple-race')
   @Throttle({ default: { limit: 250, ttl: 30_000 } })
   async startMultipleRace(
