@@ -7,7 +7,7 @@ export const itemCraftReq = {
     },
     "PHORSE Bag" : {
         "phorse" : 10000,
-        "medals" : 10,
+        "medals" : 1,
         "Scrap Metal" : 1,
         "Scrap Leather" : 1
     },

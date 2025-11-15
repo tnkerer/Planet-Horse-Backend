@@ -40,7 +40,7 @@ export const globals = {
     "Legendary": 2.2,
     "Mythic": 2.5
   },
-  "Withdraw Tax": 0.2,
+  "Withdraw Tax": 0.1,
 
   "WRON USD Price": 0.5,
 

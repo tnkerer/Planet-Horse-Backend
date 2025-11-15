@@ -2070,6 +2070,7 @@ export class HorseService {
           basePower: true,
           baseSprint: true,
           baseSpeed: true,
+          usedLevelUpTicket: true
         },
       });
       if (!horse) throw new NotFoundException('Horse not found');
@@ -2128,6 +2129,7 @@ export class HorseService {
           growthPotential,
           upgradable: false,
           careerfactor: 0, // reset career factor
+          usedLevelUpTicket: false,
         },
       });
 
