@@ -127,7 +127,8 @@ export class UserController {
 
     const updatedItem = await this.users.upgradeItem(
       req.user.wallet,
-      dto.name.trim()
+      dto.name.trim(),
+      dto.useClover === true,        // ← NEW
     );
 
     if (!updatedItem) {

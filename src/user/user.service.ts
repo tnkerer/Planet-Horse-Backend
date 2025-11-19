@@ -1645,7 +1645,11 @@ export class UserService {
     }
 
 
-    async upgradeItem(ownerWallet: string, itemName: string) {
+    async upgradeItem(
+        ownerWallet: string,
+        itemName: string,
+        useClover = false,
+    ) {
         const bases = ['Champion Bridle', 'Champion Saddle Pad', 'Champion Stirrups'] as const;
         const base = bases.find(b => itemName === b || itemName.startsWith(b + ' +'));
         if (!base) {
@@ -1668,15 +1672,32 @@ export class UserService {
             throw new BadRequestException(`No success rate defined for level ${nextLevel}`);
         }
 
-        const roll = Math.random() * 100;
-        const succeeded = roll < rate.success;
-        const willBreak = !succeeded && rate.break;
-
         return this.prisma.$transaction(async tx => {
-            // 1) Atomically decrement PHORSE & MEDALS
+            // 1) Lookup user ID by wallet
+            const user = await tx.user.findUnique({
+                where: { wallet: ownerWallet },
+                select: { id: true },
+            });
+            if (!user) throw new NotFoundException('User not found');
+
+            // 2) If using Clover, ensure the user has one (not equipped)
+            let cloverToConsume: { id: string } | null = null;
+            if (useClover) {
+                cloverToConsume = await tx.item.findFirst({
+                    where: { ownerId: user.id, name: 'Clover', horseId: null },
+                    orderBy: { createdAt: 'asc' },
+                    select: { id: true },
+                });
+
+                if (!cloverToConsume) {
+                    throw new BadRequestException('You do not have a Clover to use on this upgrade.');
+                }
+            }
+
+            // 3) Atomically decrement PHORSE & MEDALS
             const dec = await tx.user.updateMany({
                 where: {
-                    wallet: ownerWallet,
+                    id: user.id,
                     phorse: { gte: cost.phorse },
                     medals: { gte: cost.medal },
                 },
@@ -1693,14 +1714,7 @@ export class UserService {
                 );
             }
 
-            // 2) Lookup user ID
-            const user = await tx.user.findUnique({
-                where: { wallet: ownerWallet },
-                select: { id: true },
-            });
-            if (!user) throw new NotFoundException('User not found');
-
-            // 3) Bulk-delete Scrap Metal
+            // 4) Bulk-delete Scrap Metal
             if (cost.metal > 0) {
                 const metalIds = (await tx.item.findMany({
                     where: { ownerId: user.id, name: 'Scrap Metal' },
@@ -1715,7 +1729,7 @@ export class UserService {
                 await tx.item.deleteMany({ where: { id: { in: metalIds } } });
             }
 
-            // 4) Bulk-delete Scrap Leather
+            // 5) Bulk-delete Scrap Leather
             if (cost.leather > 0) {
                 const leatherIds = (await tx.item.findMany({
                     where: { ownerId: user.id, name: 'Scrap Leather' },
@@ -1730,7 +1744,7 @@ export class UserService {
                 await tx.item.deleteMany({ where: { id: { in: leatherIds } } });
             }
 
-            // 5) Find the item instance to operate on
+            // 6) Find the item instance to operate on
             const target = await tx.item.findFirst({
                 where: { ownerId: user.id, name: itemName, horseId: null },
                 orderBy: { createdAt: 'asc' },
@@ -1739,9 +1753,17 @@ export class UserService {
                 throw new BadRequestException(`You don’t own any "${itemName}"`);
             }
 
+            // 7) Compute final success chance with Clover boost (if used)
+            const baseSuccess = rate.success;
+            const effectiveSuccess = Math.min(baseSuccess + (useClover ? 10 : 0), 100); // +10% capped at 100
+
+            const roll = Math.random() * 100;
+            const succeeded = roll < effectiveSuccess;
+            const willBreak = !succeeded && rate.break;
+
             let finalItemId: string | null = null;
 
-            // 6) Apply upgrade or break
+            // 8) Apply upgrade or break
             if (succeeded) {
                 const upgraded = await tx.item.update({
                     where: { id: target.id },
@@ -1749,7 +1771,7 @@ export class UserService {
                 });
                 finalItemId = upgraded.id;
 
-                // **Increment upgradeScore based on upgradePoints**
+                // Increment upgradeScore based on upgradePoints
                 const points = upgradePoints[nextLevel.toString()] ?? 0;
                 if (points > 0) {
                     await tx.user.update({
@@ -1767,12 +1789,19 @@ export class UserService {
                 finalItemId = target.id;
             }
 
-            // 7) Log the attempt
-            const note = succeeded
+            // 9) Consume Clover if requested and present
+            if (useClover && cloverToConsume) {
+                await tx.item.delete({ where: { id: cloverToConsume.id } });
+            }
+
+            // 10) Log the attempt
+            const baseNote = succeeded
                 ? `Upgrade succeeded: "${itemName}" → "${nextName}"`
                 : willBreak
                     ? `Upgrade failed and broke "${itemName}"`
                     : `Upgrade failed (no break) for "${itemName}"`;
+
+            const note = baseNote + (useClover ? ' (Clover used, +10% success)' : '');
 
             await tx.transaction.create({
                 data: {
@@ -1795,11 +1824,9 @@ export class UserService {
             // Quest progression: track item upgrades and PHORSE spent
             try {
                 const { QuestType } = await import('../quest/quest.types');
-                // Only increment UPGRADE_ITEMS if the upgrade succeeded
                 if (result.success) {
                     await this.questService.incrementQuestProgress(result.userId, QuestType.UPGRADE_ITEMS, 1);
                 }
-                // Track PHORSE spent regardless of success/failure
                 if (result.phorseSpent > 0) {
                     await this.questService.incrementQuestProgress(result.userId, QuestType.SPEND_PHORSE, result.phorseSpent);
                 }
@@ -1813,6 +1840,7 @@ export class UserService {
             };
         });
     }
+
 
     // ------------------- LISTS SECTION -----------------------
 
