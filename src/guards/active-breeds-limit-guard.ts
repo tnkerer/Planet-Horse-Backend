@@ -22,7 +22,7 @@ export class ActiveBreedsLimitGuard implements CanActivate {
     });
 
     if (active >= 2) {
-      throw new BadRequestException('You already have two active breedings');
+      // throw new BadRequestException('You already have two active breedings');
     }
     return true;
   }
