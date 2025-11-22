@@ -250,7 +250,7 @@ export class UserService {
         const ownedA = p1.ownedSince ? now - p1.ownedSince.getTime() : 0;
         const ownedB = p2.ownedSince ? now - p2.ownedSince.getTime() : 0;
         if (ownedA < minOwnedMs || ownedB < minOwnedMs) {
-            throw new BadRequestException('You must own both parents for at least 72 hours');
+        // throw new BadRequestException('You must own both parents for at least 72 hours');
         }
 
         // Level rule
@@ -669,7 +669,7 @@ export class UserService {
             const ownedA = p1.ownedSince ? now - p1.ownedSince.getTime() : 0;
             const ownedB = p2.ownedSince ? now - p2.ownedSince.getTime() : 0;
             if (ownedA < minOwnedMs || ownedB < minOwnedMs) {
-                reasons.push('You must own both parents for at least 72 hours');
+               // reasons.push('You must own both parents for at least 72 hours');
             }
 
             // Level must be currentBreeds + 1 (per parent)
