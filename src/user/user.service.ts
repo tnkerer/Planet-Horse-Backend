@@ -466,7 +466,7 @@ export class UserService {
                 },
                 data: { currentBreeds: { increment: 1 }, status: 'BREEDING', lastBreeding: new Date() },
             });
-            if (recheckA.count === 0) throw new BadRequestException(`Parent ${p1.tokenId} no longer eligible`);
+            // if (recheckA.count === 0) throw new BadRequestException(`Parent ${p1.tokenId} no longer eligible`);
 
             const recheckB = await tx.horse.updateMany({
                 where: {
@@ -480,7 +480,7 @@ export class UserService {
                 },
                 data: { currentBreeds: { increment: 1 }, status: 'BREEDING', lastBreeding: new Date() },
             });
-            if (recheckB.count === 0) throw new BadRequestException(`Parent ${p2.tokenId} no longer eligible`);
+            // if (recheckB.count === 0) throw new BadRequestException(`Parent ${p2.tokenId} no longer eligible`);
 
             // --- Consume gene items atomically by UUID (string[]) ---
             if (toConsumeIds.length > 0) {
