@@ -42,7 +42,7 @@ export const globals = {
   },
   "Withdraw Tax": 0.1,
 
-  "WRON USD Price": 1,
+  "WRON USD Price": 0.5,
 
   "Breed Base USD By Rarity": {
     "Common": 8,

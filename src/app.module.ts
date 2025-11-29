@@ -9,12 +9,13 @@ import { ConfigModule } from '@nestjs/config';
 import * as cookieParser from 'cookie-parser';
 import * as csurf from 'csurf';
 import { HorseModule } from './horse/horse.module';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule } from '@nestjs/throttler';
+// import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
-import { ReferralXpCronService } from './user/referral-xp-cron.service';
+// import { ReferralXpCronService } from './user/referral-xp-cron.service';
 import { StableModule } from './stable/stable.module';
 import { QuestModule } from './quest/quest.module';
+import { DerbyModule } from './derby/derby.module'
 
 @Module({
   imports: [
@@ -34,7 +35,8 @@ import { QuestModule } from './quest/quest.module';
     UserModule,
     HorseModule,
     StableModule,
-    QuestModule
+    QuestModule,
+    DerbyModule
   ],
   controllers: [AppController],
   providers: [
@@ -85,6 +87,7 @@ export class AppModule implements NestModule {
         { path: 'horses/*', method: RequestMethod.PUT },
         { path: 'simulate', method: RequestMethod.POST },
         { path: 'stable/*', method: RequestMethod.POST },
+        { path: 'derby/*', method: RequestMethod.POST},
         { path: 'quest/claim', method: RequestMethod.POST },
         { path: 'quest/checkin', method: RequestMethod.POST },
         { path: 'quest/create', method: RequestMethod.POST },

@@ -60,8 +60,10 @@ model User {
   careerfactor Float         @default(1)
 
   // Quests
-  userQuests         UserQuest[]
-  dailyCheckin       DailyCheckin?
+  userQuests   UserQuest[]
+  dailyCheckin DailyCheckin?
+  PvpRaceEntry PvpRaceEntry[]
+  PvpHistory   PvpHistory[]
 }
 
 model ReferralXPLog {
@@ -81,47 +83,45 @@ model Nonce {
 }
 
 model Horse {
-  id            String         @id @default(uuid())
-  tokenId       String         @unique
-  owner         User           @relation(fields: [ownerId], references: [id])
-  ownerId       String
-  name          String
-  nickname      String?        @unique
-  sex           Sex
-  status        Status
-  rarity        String
-  exp           Int
-  upgradable    Boolean
-  level         Int
-  basePower     Int
-  currentPower  Int
-  baseSprint    Int
-  currentSprint Int
-  baseSpeed     Int
-  currentSpeed  Int
-  currentEnergy Int
-  maxEnergy     Int
-  foodUsed      Int            @default(0)
-  equipments    Item[]
-  lastRace      DateTime?
-  lastEnergy    DateTime?
-  lastBreeding  DateTime?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime?      @updatedAt
-  raceHistory   RaceHistory[]
-  presaleIntent PresaleIntent? @relation(fields: [intentId], references: [id])
-  intentId      String?
-  gen           Int            @default(0)
-  currentBreeds Int            @default(0)
-  ownedSince    DateTime?
-  maxBreeds     Int?
-  legacy        Boolean        @default(false)
+  id              String         @id @default(uuid())
+  tokenId         String         @unique
+  owner           User           @relation(fields: [ownerId], references: [id])
+  ownerId         String
+  name            String
+  nickname        String?        @unique
+  sex             Sex
+  status          Status
+  rarity          String
+  exp             Int
+  upgradable      Boolean
+  level           Int
+  basePower       Int
+  currentPower    Int
+  baseSprint      Int
+  currentSprint   Int
+  baseSpeed       Int
+  currentSpeed    Int
+  currentEnergy   Int
+  maxEnergy       Int
+  foodUsed        Int            @default(0)
+  equipments      Item[]
+  lastRace        DateTime?
+  lastEnergy      DateTime?
+  lastBreeding    DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime?      @updatedAt
+  raceHistory     RaceHistory[]
+  presaleIntent   PresaleIntent? @relation(fields: [intentId], references: [id])
+  intentId        String?
+  gen             Int            @default(0)
+  currentBreeds   Int            @default(0)
+  ownedSince      DateTime?
+  maxBreeds       Int?
+  legacy          Boolean        @default(false)
   growthPotential Float?
 
-  // NEW: how many trait slots this horse may fill now (2..5)
   traitSlotsUnlocked Int @default(2)
 
-  // NEW: relation to the per-horse trait rows
   traits  HorseTrait[]
   parents Int[]
 
@@ -134,6 +134,10 @@ model Horse {
   lastStableAsignment DateTime?
 
   careerfactor Float @default(1)
+
+  mmr          Int            @default(1000)
+  PvpRaceEntry PvpRaceEntry[]
+  PvpHistory   PvpHistory[]
 
   @@index([ownerId])
 }
@@ -309,7 +313,7 @@ enum TransactionType {
 enum TransactionStatus {
   FAILED
   PENDING
-  PROCESSING // ← new state you’re introducing
+  PROCESSING
   COMPLETED
 }
 
@@ -343,7 +347,7 @@ model RaceHistory {
   id           String   @id @default(uuid())
   createdAt    DateTime @default(now())
   phorseEarned Float
-  wronEarned   Float @default(0)
+  wronEarned   Float    @default(0)
   xpEarned     Int
   position     Int
   horse        Horse    @relation(fields: [horseId], references: [id])
@@ -469,10 +473,10 @@ model StableListing {
 }
 
 model RewardBank {
-  id        String   @id                      // e.g. "WRON"
-  token     String   @unique                  // e.g. "WRON"
-  available Decimal  @db.Decimal(36, 18)      // how much WRON is left to distribute
-  version   Int      @default(0)              // optimistic-lock helper (optional)
+  id        String   @id // e.g. "WRON"
+  token     String   @unique // e.g. "WRON"
+  available Decimal  @db.Decimal(36, 18) // how much WRON is left to distribute
+  version   Int      @default(0) // optimistic-lock helper (optional)
   updatedAt DateTime @updatedAt
 }
 
@@ -517,41 +521,41 @@ model StableLease {
 }
 
 enum QuestDifficulty {
-  SIMPLE    // IDs 1-9999
-  MEDIUM    // IDs 10000-19999
-  ADVANCED  // IDs 20000-29999
+  SIMPLE // IDs 1-9999
+  MEDIUM // IDs 10000-19999
+  ADVANCED // IDs 20000-29999
 }
 
 enum QuestType {
-  WIN_RACES          // Win X races
-  RUN_RACES          // Complete X races (any position)
-  BREED_HORSES       // Breed X horses
-  LEVEL_UP_HORSES    // Level up X horses
-  EQUIP_ITEMS        // Equip X items on horses
-  OPEN_CHESTS        // Open X chests
-  SPEND_PHORSE       // Spend X PHORSE tokens
-  EARN_PHORSE        // Earn X PHORSE tokens
-  UPGRADE_ITEMS      // Upgrade X items
-  RECYCLE_ITEMS      // Recycle X items
-  RESTORE_ENERGY     // Restore energy X times
-  CLAIM_REWARDS      // Claim X quest rewards
-  DAILY_CHECKIN      // Daily check-in
+  WIN_RACES // Win X races
+  RUN_RACES // Complete X races (any position)
+  BREED_HORSES // Breed X horses
+  LEVEL_UP_HORSES // Level up X horses
+  EQUIP_ITEMS // Equip X items on horses
+  OPEN_CHESTS // Open X chests
+  SPEND_PHORSE // Spend X PHORSE tokens
+  EARN_PHORSE // Earn X PHORSE tokens
+  UPGRADE_ITEMS // Upgrade X items
+  RECYCLE_ITEMS // Recycle X items
+  RESTORE_ENERGY // Restore energy X times
+  CLAIM_REWARDS // Claim X quest rewards
+  DAILY_CHECKIN // Daily check-in
 }
 
 model Quest {
-  id                 Int              @id
-  title              String
-  description        String
-  questType          QuestType        // Type of quest action to track
-  reward             Json             // Array of {type: 'phorse'|'wron'|'medals'|'item', amount: number, itemName?: string}
-  questsToComplete   Int              // Number of times action must be completed
-  difficulty         QuestDifficulty
-  isActive           Boolean          @default(true)
-  isDailyQuest       Boolean          @default(false) // If true, resets daily at 00:00 UTC
-  horsesToUnlock     Int              @default(0)     // Minimum number of horses required to see this quest
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
-  userQuests         UserQuest[]
+  id               Int             @id
+  title            String
+  description      String
+  questType        QuestType // Type of quest action to track
+  reward           Json // Array of {type: 'phorse'|'wron'|'medals'|'item', amount: number, itemName?: string}
+  questsToComplete Int // Number of times action must be completed
+  difficulty       QuestDifficulty
+  isActive         Boolean         @default(true)
+  isDailyQuest     Boolean         @default(false) // If true, resets daily at 00:00 UTC
+  horsesToUnlock   Int             @default(0) // Minimum number of horses required to see this quest
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  userQuests       UserQuest[]
 }
 
 model UserQuest {
@@ -577,15 +581,109 @@ model UserQuest {
 }
 
 model DailyCheckin {
-  id             String   @id @default(uuid())
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId         String   @unique
-  lastCheckinAt  DateTime
-  streak         Int      @default(1)
-  totalCheckins  Int      @default(1)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            String   @id @default(uuid())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String   @unique
+  lastCheckinAt DateTime
+  streak        Int      @default(1)
+  totalCheckins Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([userId])
 }
 
+enum PvpRaceStatus {
+  OPEN
+  RUNNING
+  COMPLETED
+  CANCELLED
+}
+
+model PvpRace {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name        String
+  description String?
+
+  // Timing
+  registrationOpensAt DateTime
+  startsAt            DateTime
+
+  // Constraints
+  maxMmr          Int? // null = no cap
+  maxParticipants Int? // null = unlimited
+
+  // Game rules
+  allowedRarities   String[]
+  wronEntryFee      Float    @default(0) // per horse
+  phorseEntryFee    Float    @default(0) // per horse, always burned
+  wronPayoutPercent Float    @default(1) // 0..1 portion of total pot that goes to winners
+
+  // Distribution of allocated prize (fixed per your spec)
+  pctFirst  Float @default(0.5)
+  pctSecond Float @default(0.35)
+  pctThird  Float @default(0.15)
+
+  status PvpRaceStatus @default(OPEN)
+
+  entries PvpRaceEntry[]
+  history PvpHistory[]
+}
+
+model PvpRaceEntry {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  race   PvpRace @relation(fields: [raceId], references: [id], onDelete: Cascade)
+  raceId String
+
+  horse   Horse  @relation(fields: [horseId], references: [id])
+  horseId String
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  // Snapshot of MMR at entry
+  mmrAtEntry Int
+
+  isActive Boolean @default(true)
+
+  @@unique([raceId, userId]) // one horse per user per race
+  @@index([raceId])
+  @@index([horseId])
+  @@index([userId])
+}
+
+model PvpHistory {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  race   PvpRace @relation(fields: [raceId], references: [id], onDelete: Cascade)
+  raceId String
+
+  horse   Horse  @relation(fields: [horseId], references: [id])
+  horseId String
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  // Position in this derby
+  position Int
+
+  // MMR evolution from this derby
+  mmrBefore Int
+  mmrAfter  Int
+
+  // Net WRON prize from this race (0 for losers, >0 for winners)
+  wronPrize    Float @default(0)
+  // PHORSE burned for this entry (logged for analytics)
+  phorseBurned Float @default(0)
+
+  @@index([raceId])
+  @@index([horseId])
+  @@index([userId])
+  @@index([position])
+}
