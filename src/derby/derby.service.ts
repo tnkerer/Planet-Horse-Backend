@@ -103,7 +103,7 @@ export class DerbyService {
             return entries.map((e) => ({ horseId: e.horseId, mmrAfter: e.mmr }));
         }
 
-        const K = 32; // tuning param
+        const K = 64; // tuning param
 
         // --- NEW: detect if all MMRs are equal ---
         const firstMmr = entries[0].mmr;
