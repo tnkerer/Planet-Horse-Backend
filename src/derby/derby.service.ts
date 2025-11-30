@@ -103,18 +103,33 @@ export class DerbyService {
             return entries.map((e) => ({ horseId: e.horseId, mmrAfter: e.mmr }));
         }
 
+        const K = 32; // tuning param
+
+        // --- NEW: detect if all MMRs are equal ---
+        const firstMmr = entries[0].mmr;
+        const allEqual = entries.every((e) => e.mmr === firstMmr);
+
+        if (allEqual) {
+            // Everyone is equally rated -> same expected position (middle)
+            const expectedPos = (n + 1) / 2; // e.g. 2 in a 3-horse race
+            return entries.map((entry) => {
+                const actual = entry.position;
+                const delta = Math.round((K * (expectedPos - actual)) / (n - 1));
+                const mmrAfter = Math.max(0, entry.mmr + delta);
+                return { horseId: entry.horseId, mmrAfter };
+            });
+        }
+
+        // --- original logic if ratings are not all equal ---
         const sortedByMmr = [...entries].sort((a, b) => b.mmr - a.mmr); // best first
         const expectedPositionByHorseId = new Map<string, number>();
         sortedByMmr.forEach((e, idx) => {
             expectedPositionByHorseId.set(e.horseId, idx + 1);
         });
 
-        const K = 32; // tuning param
-
         return entries.map((entry) => {
             const expected = expectedPositionByHorseId.get(entry.horseId) ?? (n + 1) / 2;
             const actual = entry.position;
-            // Positive delta if horse did better (lower position number) than expected
             const delta = Math.round((K * (expected - actual)) / (n - 1));
             const mmrAfter = Math.max(0, entry.mmr + delta);
             return { horseId: entry.horseId, mmrAfter };
