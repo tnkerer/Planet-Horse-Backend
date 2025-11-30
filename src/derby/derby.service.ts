@@ -17,6 +17,12 @@ type HorseEquipSnapshot = {
     equipments: { name: string }[];
 };
 
+interface DerbyResultRow {
+    horseId: string;
+    mmrBefore: number;
+    position: number; // 1 = winner, N = last
+}
+
 @Injectable()
 export class DerbyService {
     private readonly derbyAdminWallets: string[];
@@ -100,39 +106,40 @@ export class DerbyService {
     private computeMmrUpdates(entries: { horseId: string; mmr: number; position: number }[]) {
         const n = entries.length;
         if (n <= 1) {
-            return entries.map((e) => ({ horseId: e.horseId, mmrAfter: e.mmr }));
+            return entries.map(e => ({ horseId: e.horseId, mmrAfter: e.mmr }));
         }
 
-        const K = 64; // tuning param
+        const K = 64; // main tuning knob — keeps ±32 range for top/bottom regardless of N
 
-        // --- NEW: detect if all MMRs are equal ---
-        const firstMmr = entries[0].mmr;
-        const allEqual = entries.every((e) => e.mmr === firstMmr);
+        // Normalize: position 1 = best, position n = worst
+        // ActualScore = 1.0 for winner, 0.0 for last, linear in between
+        const actualScore = (pos: number) => (n - pos) / (n - 1);
 
-        if (allEqual) {
-            // Everyone is equally rated -> same expected position (middle)
-            const expectedPos = (n + 1) / 2; // e.g. 2 in a 3-horse race
-            return entries.map((entry) => {
-                const actual = entry.position;
-                const delta = Math.round((K * (expectedPos - actual)) / (n - 1));
-                const mmrAfter = Math.max(0, entry.mmr + delta);
-                return { horseId: entry.horseId, mmrAfter };
-            });
-        }
+        // Expected score vs every other horse (Elo)
+        const expectedScore = (mmr_i: number, idx_i: number) => {
+            let sum = 0;
 
-        // --- original logic if ratings are not all equal ---
-        const sortedByMmr = [...entries].sort((a, b) => b.mmr - a.mmr); // best first
-        const expectedPositionByHorseId = new Map<string, number>();
-        sortedByMmr.forEach((e, idx) => {
-            expectedPositionByHorseId.set(e.horseId, idx + 1);
-        });
+            for (let j = 0; j < n; j++) {
+                if (j === idx_i) continue;
+                const mmr_j = entries[j].mmr;
 
-        return entries.map((entry) => {
-            const expected = expectedPositionByHorseId.get(entry.horseId) ?? (n + 1) / 2;
-            const actual = entry.position;
-            const delta = Math.round((K * (expected - actual)) / (n - 1));
-            const mmrAfter = Math.max(0, entry.mmr + delta);
-            return { horseId: entry.horseId, mmrAfter };
+                // Elo expected value of i beating j
+                const e_ij = 1 / (1 + Math.pow(10, (mmr_j - mmr_i) / 400));
+                sum += e_ij;
+            }
+
+            return sum / (n - 1);
+        };
+
+        return entries.map((entry, idx) => {
+            const A = actualScore(entry.position);
+            const E = expectedScore(entry.mmr, idx);
+            const delta = Math.round(K * (A - E));
+
+            return {
+                horseId: entry.horseId,
+                mmrAfter: Math.max(0, entry.mmr + delta),
+            };
         });
     }
 
