@@ -356,6 +356,10 @@ export class DerbyService {
         const now = new Date();
 
         return this.prisma.$transaction(async (tx) => {
+            // 🔒 Idempotency / concurrency guard:
+            // Use an advisory lock keyed by derbyId so only one finalize runs at a time.
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${derbyId}))`;
+
             const race = await tx.pvpRace.findUnique({
                 where: { id: derbyId },
                 include: {
@@ -375,6 +379,8 @@ export class DerbyService {
 
             if (!race) throw new NotFoundException('Derby not found');
 
+            // If someone already finalized while we were waiting on the lock,
+            // just return the existing history (idempotent behavior).
             if (
                 race.status === PvpRaceStatus.COMPLETED ||
                 race.status === PvpRaceStatus.CANCELLED
@@ -396,14 +402,12 @@ export class DerbyService {
                 return { race, history };
             }
 
-
             if (isBefore(now, race.startsAt)) {
                 throw new BadRequestException('Derby has not started yet');
             }
 
             const activeEntries = race.entries;
             if (activeEntries.length === 0) {
-                // No entries, just mark as completed
                 await tx.pvpRace.update({
                     where: { id: race.id },
                     data: { status: PvpRaceStatus.COMPLETED },
@@ -462,7 +466,6 @@ export class DerbyService {
                 const mmrBefore = horse.mmr;
                 const mmrAfter = mmrAfterByHorseId.get(horse.id) ?? mmrBefore;
 
-                // Update user WRON (only prize; fees were deducted at registration)
                 if (prize > 0) {
                     await tx.user.update({
                         where: { id: user.id },
@@ -472,13 +475,11 @@ export class DerbyService {
                     });
                 }
 
-                // Update horse MMR
                 await tx.horse.update({
                     where: { id: horse.id },
                     data: { mmr: mmrAfter },
                 });
 
-                // Create history record
                 await tx.pvpHistory.create({
                     data: {
                         raceId: race.id,
@@ -493,7 +494,6 @@ export class DerbyService {
                 });
             }
 
-            // Mark race as completed
             const updatedRace = await tx.pvpRace.update({
                 where: { id: race.id },
                 data: { status: PvpRaceStatus.COMPLETED },
@@ -515,8 +515,6 @@ export class DerbyService {
             });
 
             return { race: updatedRace, history };
-
-
         });
     }
 
