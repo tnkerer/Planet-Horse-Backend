@@ -109,7 +109,7 @@ export class DerbyService {
             return entries.map(e => ({ horseId: e.horseId, mmrAfter: e.mmr }));
         }
 
-        K = 5 * sqrt(n); // main tuning knob — keeps ±32 range for top/bottom regardless of N
+        const K = 5 * Math.sqrt(n); // main tuning knob — keeps ±32 range for top/bottom regardless of N
 
         // Normalize: position 1 = best, position n = worst
         // ActualScore = 1.0 for winner, 0.0 for last, linear in between
