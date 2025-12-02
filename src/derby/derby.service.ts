@@ -109,7 +109,7 @@ export class DerbyService {
             return entries.map(e => ({ horseId: e.horseId, mmrAfter: e.mmr }));
         }
 
-        const K = 5 * Math.sqrt(n); // main tuning knob — keeps ±32 range for top/bottom regardless of N
+        const K = n * 3; // main tuning knob — keeps ±32 range for top/bottom regardless of N
 
         // Normalize: position 1 = best, position n = worst
         // ActualScore = 1.0 for winner, 0.0 for last, linear in between
@@ -407,12 +407,30 @@ export class DerbyService {
             }
 
             const activeEntries = race.entries;
-            if (activeEntries.length === 0) {
-                await tx.pvpRace.update({
+
+            // If fewer than 5 entries, cancel and refund everyone
+            if (activeEntries.length < 5) {
+                for (const entry of activeEntries) {
+                    await tx.user.update({
+                        where: { id: entry.user.id },
+                        data: {
+                            wron: { increment: race.wronEntryFee },
+                            phorse: { increment: race.phorseEntryFee },
+                        },
+                    });
+
+                    await tx.pvpRaceEntry.update({
+                        where: { id: entry.id },
+                        data: { isActive: false },
+                    });
+                }
+
+                const cancelledRace = await tx.pvpRace.update({
                     where: { id: race.id },
-                    data: { status: PvpRaceStatus.COMPLETED },
+                    data: { status: PvpRaceStatus.CANCELLED },
                 });
-                return { race, history: [] };
+
+                return { race: cancelledRace, history: [] };
             }
 
             // --- Determine positions (stats + luck) -----------------------------
