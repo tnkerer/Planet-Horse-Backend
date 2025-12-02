@@ -214,10 +214,12 @@ export class DerbyService {
             }
 
             // Check if user already has an active entry (DB also enforces, but nicer error)
-            const existingEntry = await tx.pvpRaceEntry.findFirst({
-                where: { raceId: race.id, userId, isActive: true },
+            const existingEntryAny = await tx.pvpRaceEntry.findFirst({
+                where: { raceId: race.id, userId },
             });
-            if (existingEntry) {
+
+            if (existingEntryAny?.isActive) {
+                // still active → keep same behavior
                 throw new BadRequestException('User already has a horse in this derby');
             }
 
@@ -260,15 +262,30 @@ export class DerbyService {
                 },
             });
 
-            const entry = await tx.pvpRaceEntry.create({
-                data: {
-                    raceId: race.id,
-                    horseId: horse.id,
-                    userId,
-                    mmrAtEntry: horse.mmr,
-                    isActive: true,
-                },
-            });
+            let entry;
+
+            // If there is an inactive row, re-use it to avoid unique-constraint issues
+            if (existingEntryAny && !existingEntryAny.isActive) {
+                entry = await tx.pvpRaceEntry.update({
+                    where: { id: existingEntryAny.id },
+                    data: {
+                        horseId: horse.id,
+                        mmrAtEntry: horse.mmr,
+                        isActive: true,
+                    },
+                });
+            } else {
+                // no row yet → create as usual
+                entry = await tx.pvpRaceEntry.create({
+                    data: {
+                        raceId: race.id,
+                        horseId: horse.id,
+                        userId,
+                        mmrAtEntry: horse.mmr,
+                        isActive: true,
+                    },
+                });
+            }
 
             return entry;
         });
