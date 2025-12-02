@@ -944,6 +944,7 @@ export class HorseService {
    * startMultipleRace:
    *  - Runs race logic for multiple tokenIds in one transaction.
    *  - Batches writes for performance.
+   *  - Now also tracks quest progress (RUN_RACES, WIN_RACES, EARN_PHORSE).
    */
   async startMultipleRace(
     ownerWallet: string,
@@ -958,7 +959,7 @@ export class HorseService {
     droppedItems: string[];
     droppedChests: number[];
   }>> {
-    return this.prisma.$transaction(async tx => {
+    const txResult = await this.prisma.$transaction(async tx => {
       // 1) Load user & check balance
       const user = await tx.user.findUnique({
         where: { wallet: ownerWallet },
@@ -976,6 +977,7 @@ export class HorseService {
         },
       });
       if (!user) throw new NotFoundException('User not found');
+
       // NEW: check if user has a Stable
       const hasStable = await tx.stable.findFirst({
         where: { userId: user.id },
@@ -989,6 +991,7 @@ export class HorseService {
       if (totalCost > 0 && user.phorse < totalCost) {
         throw new BadRequestException('Not enough PHORSE to pay for all races');
       }
+
       // 2) Load horses & equipments
       const horses = await tx.horse.findMany({
         where: { tokenId: { in: tokenIds } },
@@ -1005,6 +1008,7 @@ export class HorseService {
         perHorseShardCost[h.tokenId] = c;
         totalShardCost += c;
       }
+
       /* const dec = await tx.user.updateMany({
         where: { id: user.id, shards: { gte: totalShardCost } },
         data: { shards: { decrement: totalShardCost } },
@@ -1127,8 +1131,6 @@ export class HorseService {
             tokenReward = parseFloat(fallbackPhorse.toFixed(2));
           }
         }
-
-        // console.log({ tokenReward, wronReward, jackpot })
 
         const medalReward = position === 1 ? 3 :
           position === 2 ? 2 :
@@ -1286,7 +1288,6 @@ export class HorseService {
         throw new BadRequestException(`Not enough SHARDS: need ${totalShardCost}`);
       }
 
-      // 4) Batch all writes
       await Promise.all([
         Promise.all(itemUsageOps),
         Promise.all(rawResults.map(r =>
@@ -1325,8 +1326,8 @@ export class HorseService {
         )),
       ]);
 
-      // 5) Return per-horse enriched results
-      return rawResults.map(r => ({
+      // 5) Build per-horse results
+      const results = rawResults.map(r => ({
         tokenId: r.tokenId,
         xpReward: r.xpReward,
         tokenReward: r.tokenReward,
@@ -1337,8 +1338,56 @@ export class HorseService {
         droppedItems: droppedItemsMap.get(r.tokenId) || [],
         droppedChests: droppedChestsMap.get(r.tokenId) || []
       }));
+
+      // NEW: aggregate quest-related info
+      const runCount = results.length;
+      const winCount = results.filter(r => r.position === 1).length;
+      const totalPhorseEarned = results.reduce((sum, r) => sum + r.tokenReward, 0);
+
+      return {
+        userId: user.id,
+        results,
+        runCount,
+        winCount,
+        totalPhorseEarned,
+      };
     });
+
+    // --- NEW: Quest progression outside the transaction ---
+    try {
+      const { QuestType } = await import('../quest/quest.types');
+
+      if (txResult.runCount > 0) {
+        await this.questService.incrementQuestProgress(
+          txResult.userId,
+          QuestType.RUN_RACES,
+          txResult.runCount,
+        );
+      }
+
+      if (txResult.winCount > 0) {
+        await this.questService.incrementQuestProgress(
+          txResult.userId,
+          QuestType.WIN_RACES,
+          txResult.winCount,
+        );
+      }
+
+      if (txResult.totalPhorseEarned > 0) {
+        await this.questService.incrementQuestProgress(
+          txResult.userId,
+          QuestType.EARN_PHORSE,
+          txResult.totalPhorseEarned,
+        );
+      }
+    } catch (err) {
+      console.error('Failed to update quest progress for multiple race:', err);
+    }
+
+    // Public API stays the same as before
+    return txResult.results;
   }
+
 
   /**
   * restoreHorse:
