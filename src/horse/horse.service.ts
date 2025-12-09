@@ -12,6 +12,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import Moralis from 'moralis';
 import { QuestService } from '../quest/quest.service';
+import { PublicHorseDto } from './dto/public-horse.dto';
 
 const MORALIS_API_KEY = process.env.MORALIS_API_KEY;
 const NFT_CONTRACT_ADDRESS = process.env.NFT_CONTRACT_ADDRESS
@@ -2213,5 +2214,45 @@ export class HorseService {
         unequippedItemsCount: unequipRes.count ?? 0,
       };
     });
+  }
+
+  async getPublicHorseById(id: string): Promise<PublicHorseDto | null> {
+    const horse = await this.prisma.horse.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        tokenId: true,
+        name: true,
+        nickname: true,
+        rarity: true,
+        sex: true,
+        status: true,
+        level: true,
+        exp: true,
+        upgradable: true,
+        basePower: true,
+        currentPower: true,
+        baseSprint: true,
+        currentSprint: true,
+        baseSpeed: true,
+        currentSpeed: true,
+        currentEnergy: true,
+        maxEnergy: true,
+        gen: true,
+        currentBreeds: true,
+        maxBreeds: true,
+        legacy: true,
+        growthPotential: true,
+        traitSlotsUnlocked: true,
+        careerfactor: true,
+        mmr: true,
+        equipments: {
+          select: { name: true }, // only what we need for read-only display
+        },
+      },
+    });
+
+    if (!horse) return null;
+    return horse;
   }
 }

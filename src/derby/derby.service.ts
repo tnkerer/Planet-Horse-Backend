@@ -4,11 +4,12 @@ import {
     NotFoundException,
     BadRequestException,
 } from '@nestjs/common';
-import { AssignHorseDto, CreateDerbyDto, RemoveHorseDto } from './derby.dto';
-import { PvpRaceStatus } from '@prisma/client';
+import { AssignHorseDto, CreateDerbyDto, HorseOdds, RemoveHorseDto } from './derby.dto';
+import { PvpRaceStatus, TransactionType, TransactionStatus } from '@prisma/client';
 import { addMinutes, isBefore } from 'date-fns';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { itemModifiers } from 'src/data/items';
+import { DerbyOddsResponse } from './derby.dto'
 
 type HorseEquipSnapshot = {
     currentPower: number;
@@ -17,19 +18,13 @@ type HorseEquipSnapshot = {
     equipments: { name: string }[];
 };
 
-interface DerbyResultRow {
-    horseId: string;
-    mmrBefore: number;
-    position: number; // 1 = winner, N = last
-}
-
 @Injectable()
 export class DerbyService {
     private readonly derbyAdminWallets: string[];
 
     constructor(private readonly prisma: PrismaService) {
         this.derbyAdminWallets = (
-            '0xD48Aad987e8400e0411486C14b56A0Bf357DaFBc'
+            '0xD48Aad987e8400e0411486C14b56A0Bf357DaFBc, 0xf293628f6669Cb443148d877F022d62B7b7093D2, 0xC304355430b4bDefC85F391F428739903B0EBE66, 0x84F70cF2704D33A35d3dE3201FB6C331DD4Dc2d5, 0x163ad77bba3A5E5f9Daaa4E60A5258c21F5062aa, 0x8509C1A3E6EDe978988E66d7366B5feD064ae2E3'
         )
             .split(',')
             .map((w) => w.trim().toLowerCase())
@@ -53,6 +48,13 @@ export class DerbyService {
         }
 
         return { extraSpd, extraSpt, extraPwr };
+    }
+
+
+    public isDerbyAdmin(walletRaw?: string | null): boolean {
+        if (!walletRaw) return false;
+        const wallet = walletRaw.toLowerCase();
+        return this.derbyAdminWallets.includes(wallet);
     }
 
     /**
@@ -82,6 +84,10 @@ export class DerbyService {
         if (!isBefore(now, startsAt)) {
             throw new BadRequestException('Registration period has ended');
         }
+    }
+
+    private ensureRaceOpenForBetting(race: any) {
+        this.ensureRaceOpenForRegistration(race);
     }
 
     // Simple score function: base stats + luck
@@ -262,6 +268,33 @@ export class DerbyService {
                 },
             });
 
+            // 🔹 Track derby join fees (WRON + PHORSE)
+            if (race.wronEntryFee > 0) {
+                await tx.transaction.create({
+                    data: {
+                        ownerId: userId,
+                        type: TransactionType.BURN, // fee / sink
+                        status: TransactionStatus.COMPLETED,
+                        value: race.wronEntryFee,
+                        note: `DERBY_ENTRY_WRON:${race.id}`,
+                        tokenSymbol: 'WRON',
+                    },
+                });
+            }
+
+            if (race.phorseEntryFee > 0) {
+                await tx.transaction.create({
+                    data: {
+                        ownerId: userId,
+                        type: TransactionType.BURN, // PHORSE is actually burned
+                        status: TransactionStatus.COMPLETED,
+                        value: race.phorseEntryFee,
+                        note: `DERBY_ENTRY_PHORSE:${race.id}`,
+                        tokenSymbol: 'PHORSE',
+                    },
+                });
+            }
+
             let entry;
 
             // If there is an inactive row, re-use it to avoid unique-constraint issues
@@ -288,6 +321,7 @@ export class DerbyService {
             }
 
             return entry;
+
         });
     }
 
@@ -374,7 +408,6 @@ export class DerbyService {
 
         return this.prisma.$transaction(async (tx) => {
             // 🔒 Idempotency / concurrency guard:
-            // Use an advisory lock keyed by derbyId so only one finalize runs at a time.
             await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${derbyId}))`;
 
             const race = await tx.pvpRace.findUnique({
@@ -391,13 +424,16 @@ export class DerbyService {
                             user: true,
                         },
                     },
+                    bets: {
+                        include: {
+                            user: true,
+                        },
+                    },
                 },
             });
 
             if (!race) throw new NotFoundException('Derby not found');
 
-            // If someone already finalized while we were waiting on the lock,
-            // just return the existing history (idempotent behavior).
             if (
                 race.status === PvpRaceStatus.COMPLETED ||
                 race.status === PvpRaceStatus.CANCELLED
@@ -425,8 +461,9 @@ export class DerbyService {
 
             const activeEntries = race.entries;
 
-            // If fewer than 5 entries, cancel and refund everyone
+            // ------------------- CANCELLED CASE (< 5 entries) -------------------
             if (activeEntries.length < 5) {
+                // Refund entry fees
                 for (const entry of activeEntries) {
                     await tx.user.update({
                         where: { id: entry.user.id },
@@ -436,21 +473,73 @@ export class DerbyService {
                         },
                     });
 
+                    if (race.wronEntryFee > 0) {
+                        await tx.transaction.create({
+                            data: {
+                                ownerId: entry.user.id,
+                                type: TransactionType.DEPOSIT,
+                                status: TransactionStatus.COMPLETED,
+                                value: race.wronEntryFee,
+                                note: `DERBY_REFUND_WRON:${race.id}`,
+                                tokenSymbol: 'WRON',
+                            },
+                        });
+                    }
+
+                    if (race.phorseEntryFee > 0) {
+                        await tx.transaction.create({
+                            data: {
+                                ownerId: entry.user.id,
+                                type: TransactionType.DEPOSIT,
+                                status: TransactionStatus.COMPLETED,
+                                value: race.phorseEntryFee,
+                                note: `DERBY_REFUND_PHORSE:${race.id}`,
+                                tokenSymbol: 'PHORSE',
+                            },
+                        });
+                    }
+
                     await tx.pvpRaceEntry.update({
                         where: { id: entry.id },
                         data: { isActive: false },
                     });
                 }
 
+                // Refund ALL bets fully if derby cancelled
+                for (const bet of race.bets) {
+                    await tx.user.update({
+                        where: { id: bet.userId },
+                        data: {
+                            wron: { increment: bet.amount },
+                        },
+                    });
+
+                    await tx.transaction.create({
+                        data: {
+                            ownerId: bet.userId,
+                            type: TransactionType.DEPOSIT,
+                            status: TransactionStatus.COMPLETED,
+                            value: bet.amount,
+                            note: `DERBY_BET_REFUND:${race.id}:${bet.horseId}`,
+                            tokenSymbol: 'WRON',
+                        },
+                    });
+                }
+
                 const cancelledRace = await tx.pvpRace.update({
                     where: { id: race.id },
-                    data: { status: PvpRaceStatus.CANCELLED },
+                    data: {
+                        status: PvpRaceStatus.CANCELLED,
+                        bettingPoolWron: 0,
+                        totalBetWron: 0,
+                    },
                 });
 
                 return { race: cancelledRace, history: [] };
             }
 
-            // --- Determine positions (stats + luck) -----------------------------
+            // ------------------- NORMAL COMPLETION CASE ------------------------
+            // Determine positions (stats + luck)
             const scoring = activeEntries.map((entry) => ({
                 entry,
                 score: this.computeHorseScore({
@@ -468,7 +557,7 @@ export class DerbyService {
                 position: idx + 1,
             }));
 
-            // --- Compute WRON prize pool ----------------------------------------
+            // Compute WRON prize pool for race entry fees (existing logic)
             const totalEntries = activeEntries.length;
             const totalWrOnFees = totalEntries * race.wronEntryFee;
             const allocatedPrize = totalWrOnFees * (race.wronPayoutPercent / 100);
@@ -477,7 +566,7 @@ export class DerbyService {
             const secondPrize = allocatedPrize * race.pctSecond;
             const thirdPrize = allocatedPrize * race.pctThird;
 
-            // --- Determine MMR changes -----------------------------------------
+            // Determine MMR changes
             const mmrInputs = ranked.map((r) => ({
                 horseId: r.entry.horseId,
                 mmr: r.entry.horse.mmr,
@@ -488,7 +577,7 @@ export class DerbyService {
             const mmrAfterByHorseId = new Map<string, number>();
             mmrUpdates.forEach((u) => mmrAfterByHorseId.set(u.horseId, u.mmrAfter));
 
-            // --- Apply prizes & create history rows -----------------------------
+            // ------------- Apply entry-fee prizes & create history rows ---------
             for (const r of ranked) {
                 const horse = r.entry.horse;
                 const user = r.entry.user;
@@ -506,6 +595,17 @@ export class DerbyService {
                         where: { id: user.id },
                         data: {
                             wron: { increment: prize },
+                        },
+                    });
+
+                    await tx.transaction.create({
+                        data: {
+                            ownerId: user.id,
+                            type: TransactionType.DEPOSIT,
+                            status: TransactionStatus.COMPLETED,
+                            value: prize,
+                            note: `DERBY_PRIZE:${race.id}:position:${r.position}`,
+                            tokenSymbol: 'WRON',
                         },
                     });
                 }
@@ -527,6 +627,51 @@ export class DerbyService {
                         phorseBurned: race.phorseEntryFee,
                     },
                 });
+            }
+
+            // ------------- Betting payouts (only if there are bets) ------------
+            if (race.bets.length > 0 && race.bettingPoolWron > 0) {
+                const winningHorseId = ranked[0].entry.horseId;
+                const winningBets = race.bets.filter(
+                    (b) => b.horseId === winningHorseId,
+                );
+
+                if (winningBets.length > 0) {
+                    const totalWinningStake = winningBets.reduce(
+                        (sum, b) => sum + b.amount,
+                        0,
+                    );
+
+                    if (totalWinningStake > 0) {
+                        const pool = race.bettingPoolWron;
+
+                        for (const bet of winningBets) {
+                            const share = bet.amount / totalWinningStake;
+                            const payout = pool * share;
+
+                            if (payout <= 0) continue;
+
+                            await tx.user.update({
+                                where: { id: bet.userId },
+                                data: {
+                                    wron: { increment: payout },
+                                },
+                            });
+
+                            await tx.transaction.create({
+                                data: {
+                                    ownerId: bet.userId,
+                                    type: TransactionType.DEPOSIT,
+                                    status: TransactionStatus.COMPLETED,
+                                    value: payout,
+                                    note: `DERBY_BET_PRIZE:${race.id}:${winningHorseId}`,
+                                    tokenSymbol: 'WRON',
+                                },
+                            });
+                        }
+                    }
+                }
+                // if no one bet on the winner, pool is effectively house edge
             }
 
             const updatedRace = await tx.pvpRace.update({
@@ -603,5 +748,202 @@ export class DerbyService {
         return { ...race, history };
     }
 
+
+    // --- Betting: place a bet on a horse -----------------------------------
+    async placeBet(
+        userWallet: string,
+        derbyId: string,
+        horseId: string,
+        amount: number,
+    ) {
+        if (!amount || amount <= 0) {
+            throw new BadRequestException('Bet amount must be greater than zero');
+        }
+
+        return this.prisma.$transaction(async (tx) => {
+            const user = await tx.user.findUnique({
+                where: { wallet: userWallet },
+                select: { id: true, wron: true },
+            });
+
+            if (!user) {
+                throw new NotFoundException('User not found for this wallet');
+            }
+
+            const race = await tx.pvpRace.findUnique({
+                where: { id: derbyId },
+                include: {
+                    entries: {
+                        where: { isActive: true },
+                        select: { horseId: true },
+                    },
+                    bets: {
+                        where: { userId: user.id },
+                        select: { horseId: true },
+                    },
+                },
+            });
+
+            if (!race) throw new NotFoundException('Derby not found');
+
+            this.ensureRaceOpenForBetting(race);
+
+            // Horse must be participating in this derby
+            const isHorseInRace = race.entries.some((e) => e.horseId === horseId);
+            if (!isHorseInRace) {
+                throw new BadRequestException('This horse is not registered in the derby');
+            }
+
+            // Only one bet per user per horse per race
+            const hasExistingBet = race.bets.some((b) => b.horseId === horseId);
+            if (hasExistingBet) {
+                throw new BadRequestException('You already placed a bet on this horse');
+            }
+
+            if (user.wron < amount) {
+                throw new BadRequestException('Insufficient WRON to place this bet');
+            }
+
+            // Deduct WRON from user
+            await tx.user.update({
+                where: { id: user.id },
+                data: {
+                    wron: { decrement: amount },
+                },
+            });
+
+            // Log stake as a BURN (from player POV, it is spent)
+            await tx.transaction.create({
+                data: {
+                    ownerId: user.id,
+                    type: TransactionType.BURN,
+                    status: TransactionStatus.COMPLETED,
+                    value: amount,
+                    note: `DERBY_BET_STAKE:${race.id}:${horseId}`,
+                    tokenSymbol: 'WRON',
+                },
+            });
+
+            const poolContribution = amount * 0.8; // 80% goes to betting pool
+
+            // Create bet row
+            const bet = await tx.pvpBet.create({
+                data: {
+                    raceId: race.id,
+                    userId: user.id,
+                    horseId,
+                    amount,
+                },
+            });
+
+            // Update aggregates on race
+            await tx.pvpRace.update({
+                where: { id: race.id },
+                data: {
+                    totalBetWron: { increment: amount },
+                    bettingPoolWron: { increment: poolContribution },
+                },
+            });
+
+            return bet;
+        });
+    }
+
+    // --- Betting: get current odds & potential payouts ---------------------
+    async getDerbyOdds(
+        derbyId: string,
+        userWallet?: string,
+    ): Promise<DerbyOddsResponse> {
+        const race = await this.prisma.pvpRace.findUnique({
+            where: { id: derbyId },
+            include: {
+                bets: {
+                    include: {
+                        user: true,
+                    },
+                },
+            },
+        });
+
+        if (!race) throw new NotFoundException('Derby not found');
+
+        // If derby already cancelled, just return empty odds
+        if (race.status === PvpRaceStatus.CANCELLED) {
+            return {
+                raceId: race.id,
+                totalStaked: 0,
+                poolAmount: 0,
+                horses: [],
+            };
+        }
+
+        const totalStaked = race.bets.reduce((sum, b) => sum + b.amount, 0);
+        const poolAmount =
+            race.bettingPoolWron && race.bettingPoolWron > 0
+                ? race.bettingPoolWron
+                : totalStaked * 0.8;
+
+        const oddsByHorse = new Map<
+            string,
+            { total: number; userStake: number }
+        >();
+
+        const userId =
+            userWallet && userWallet.length
+                ? (
+                    await this.prisma.user.findUnique({
+                        where: { wallet: userWallet },
+                        select: { id: true },
+                    })
+                )?.id
+                : undefined;
+
+        for (const bet of race.bets) {
+            const key = bet.horseId;
+            const rec = oddsByHorse.get(key) || { total: 0, userStake: 0 };
+            rec.total += bet.amount;
+            if (userId && bet.userId === userId) {
+                rec.userStake += bet.amount;
+            }
+            oddsByHorse.set(key, rec);
+        }
+
+        const horses: HorseOdds[] = [];
+
+        for (const [horseId, { total, userStake }] of oddsByHorse.entries()) {
+            if (total <= 0 || poolAmount <= 0) {
+                horses.push({
+                    horseId,
+                    totalStaked: total,
+                    oddsMultiplier: null,
+                    ...(userStake > 0
+                        ? { userStake, userPotentialPayout: userStake }
+                        : {}),
+                });
+                continue;
+            }
+
+            const oddsMultiplier = poolAmount / total;
+            const h: HorseOdds = {
+                horseId,
+                totalStaked: total,
+                oddsMultiplier,
+            };
+
+            if (userStake > 0) {
+                h.userStake = userStake;
+                h.userPotentialPayout = userStake * oddsMultiplier;
+            }
+
+            horses.push(h);
+        }
+
+        return {
+            raceId: race.id,
+            totalStaked,
+            poolAmount,
+            horses,
+        };
+    }
 
 }

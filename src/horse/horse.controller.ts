@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Request, Param, Post, Put, Req, BadGatewayException, Body, BadRequestException } from '@nestjs/common';
+import { Controller, Get, UseGuards, Request, Param, Post, Put, Req, BadGatewayException, Body, BadRequestException, NotFoundException } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { HorseService, RewardsSuccess } from './horse.service';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
@@ -9,6 +9,7 @@ import { IsOwnerGuard } from 'src/guards/is-owner.guard';
 import { IsMultipleOwnerGuard } from 'src/guards/is-multiple-owner.guard';
 import { IsBoolean, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer'
+import { PublicHorseDto } from './dto/public-horse.dto';
 
 interface ConsumeDto {
   itemName: string;
@@ -193,6 +194,18 @@ export class HorseController {
   ) {
     const ownerWallet = req.user.wallet as string;
     return this.horseService.ascendHorse(ownerWallet, tokenId);
+  }
+
+  // GET /horses/public/:id
+  @Get('public/:id')
+  async getPublicHorse(
+    @Param('id') id: string,
+  ): Promise<PublicHorseDto> {
+    const horse = await this.horseService.getPublicHorseById(id);
+    if (!horse) {
+      throw new NotFoundException('Horse not found');
+    }
+    return horse;
   }
 
 }

@@ -52,3 +52,24 @@ export class RemoveHorseDto {
   @IsString()
   horseId: string;
 }
+
+export class PlaceBetDto {
+  horseId: string; // horse in this derby you're betting on
+  amount: number;  // WRON amount to bet
+}
+
+export interface HorseOdds {
+  horseId: string;
+  totalStaked: number;
+  oddsMultiplier: number | null;
+  userStake?: number;
+  userPotentialPayout?: number;
+}
+
+export interface DerbyOddsResponse {
+  raceId: string;
+  totalStaked: number;
+  poolAmount: number;
+  horses: HorseOdds[];
+}
+

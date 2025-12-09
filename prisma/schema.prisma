@@ -64,6 +64,7 @@ model User {
   dailyCheckin DailyCheckin?
   PvpRaceEntry PvpRaceEntry[]
   PvpHistory   PvpHistory[]
+  pvpBets      PvpBet[]
 }
 
 model ReferralXPLog {
@@ -138,6 +139,7 @@ model Horse {
   mmr          Int            @default(1000)
   PvpRaceEntry PvpRaceEntry[]
   PvpHistory   PvpHistory[]
+  pvpBets      PvpBet[]
 
   @@index([ownerId])
 }
@@ -631,6 +633,38 @@ model PvpRace {
 
   entries PvpRaceEntry[]
   history PvpHistory[]
+
+  /// --- BETTING FIELDS (NEW) ---------------------------------------------
+  /// Total WRON staked in betting for this derby (all bets, before house cut)
+  totalBetWron    Float    @default(0)
+  /// Portion of that staking that actually forms the betting pool (80% of stakes)
+  bettingPoolWron Float    @default(0)
+  /// Individual bets for this race
+  bets            PvpBet[]
+}
+
+model PvpBet {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  race   PvpRace @relation(fields: [raceId], references: [id], onDelete: Cascade)
+  raceId String
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  horse   Horse  @relation(fields: [horseId], references: [id])
+  horseId String
+
+  /// Amount of WRON staked on this horse in this race
+  amount Float
+
+  /// One bet per user per horse per race (you can relax this later if you want multi-bets)
+  @@unique([raceId, userId, horseId])
+  @@index([raceId])
+  @@index([horseId])
+  @@index([userId])
 }
 
 model PvpRaceEntry {

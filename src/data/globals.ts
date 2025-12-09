@@ -1,5 +1,5 @@
 export const globals = {
-  "Base Denominator": 32,
+  "Base Denominator": 48,
   "Quarter-Horse Racing Index": 1,
   "Flat Racing Index": 1,
   "Draft Horse Pulling Index": 1,

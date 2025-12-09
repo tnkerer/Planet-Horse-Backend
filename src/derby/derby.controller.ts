@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Post,
@@ -11,12 +12,21 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { DerbyService } from './derby.service';
-import { AssignHorseDto, CreateDerbyDto, RemoveHorseDto } from './derby.dto';
+import { AssignHorseDto, CreateDerbyDto, RemoveHorseDto, PlaceBetDto, DerbyOddsResponse } from './derby.dto';
 
 @Controller('derby')
 @UseGuards(JwtAuthGuard, ThrottlerGuard)
 export class DerbyController {
-  constructor(private readonly derbyService: DerbyService) {}
+  constructor(private readonly derbyService: DerbyService) { }
+
+  @Get('admin/panel')
+  async checkDerbyAdmin(@Request() req: any) {
+    const wallet: string | undefined = req.user?.wallet;
+    if (!this.derbyService.isDerbyAdmin(wallet)) {
+      throw new ForbiddenException('Access denied. Derby admin only.');
+    }
+    return { ok: true };
+  }
 
   /**
    * POST /derby/create
@@ -142,4 +152,56 @@ export class DerbyController {
     }
     return this.derbyService.finalizeDerby(derbyId);
   }
+
+  /**
+  * POST /derby/:id/bet
+  *  - Place a WRON bet on a specific horse in this derby
+  *  - Uses user's authenticated wallet to resolve User
+  */
+  @Post(':id/bet')
+  @Throttle({ default: { limit: 50, ttl: 30_000 } })
+  async placeBet(
+    @Request() req,
+    @Param('id') derbyId: string,
+    @Body() dto: PlaceBetDto,
+  ) {
+    const wallet = req.user.wallet as string;
+    if (!wallet) {
+      throw new BadRequestException('Missing authenticated user wallet');
+    }
+    if (!dto.horseId || typeof dto.horseId !== 'string') {
+      throw new BadRequestException('"horseId" must be a nonempty string');
+    }
+    if (
+      dto.amount === undefined ||
+      dto.amount === null ||
+      typeof dto.amount !== 'number' ||
+      !Number.isFinite(dto.amount) ||
+      dto.amount <= 0
+    ) {
+      throw new BadRequestException('"amount" must be a positive number');
+    }
+
+    return this.derbyService.placeBet(wallet, derbyId, dto.horseId, dto.amount);
+  }
+
+  /**
+  * GET /derby/:id/odds
+  *  - Returns current betting odds + potential payout per horse
+  *  - If user is authenticated, includes userStake and userPotentialPayout
+  */
+  @Get(':id/odds')
+  @Throttle({ default: { limit: 100, ttl: 30_000 } })
+  async getDerbyOdds(
+    @Request() req,
+    @Param('id') derbyId: string,
+  ): Promise<DerbyOddsResponse> {
+    if (!derbyId) {
+      throw new BadRequestException('Derby id is required');
+    }
+
+    const wallet: string | undefined = req.user?.wallet;
+    return this.derbyService.getDerbyOdds(derbyId, wallet);
+  }
+
 }
