@@ -362,7 +362,7 @@ export class DerbyService {
                 where: {
                     raceId: race.id,
                     userId,
-                    horseId: dto.horseId,
+                    horseId: dto.horseId, // this is the Horse.id
                     isActive: true,
                 },
             });
@@ -371,7 +371,7 @@ export class DerbyService {
                 throw new NotFoundException('No active entry for this horse in this derby');
             }
 
-            // Refund fees (PHORSE is "unburned" here since derby didn’t happen yet)
+            // Refund entry fees (PHORSE is "unburned" here since derby didn’t happen yet)
             await tx.user.update({
                 where: { id: userId },
                 data: {
@@ -385,9 +385,63 @@ export class DerbyService {
                 data: { isActive: false },
             });
 
+            // 🔹 NEW: refund all bets on this horse in this derby
+            const betsOnHorse = await tx.pvpBet.findMany({
+                where: {
+                    raceId: race.id,
+                    horseId: dto.horseId, // same Horse.id
+                },
+            });
+
+            if (betsOnHorse.length > 0) {
+                const totalHorseStake = betsOnHorse.reduce(
+                    (sum, b) => sum + b.amount,
+                    0,
+                );
+
+                // Refund each bettor and log a DEPOSIT
+                for (const bet of betsOnHorse) {
+                    await tx.user.update({
+                        where: { id: bet.userId },
+                        data: {
+                            wron: { increment: bet.amount },
+                        },
+                    });
+
+                    await tx.transaction.create({
+                        data: {
+                            ownerId: bet.userId,
+                            type: TransactionType.DEPOSIT,
+                            status: TransactionStatus.COMPLETED,
+                            value: bet.amount,
+                            note: `DERBY_BET_REFUND_QUIT:${race.id}:${bet.horseId}`,
+                            tokenSymbol: 'WRON',
+                        },
+                    });
+                }
+
+                // Adjust race aggregates (mirror placeBet logic: 80% goes to pool)
+                await tx.pvpRace.update({
+                    where: { id: race.id },
+                    data: {
+                        totalBetWron: { decrement: totalHorseStake },
+                        bettingPoolWron: { decrement: totalHorseStake * 0.8 },
+                    },
+                });
+
+                // Remove those bets so odds & totals stay consistent
+                await tx.pvpBet.deleteMany({
+                    where: {
+                        raceId: race.id,
+                        horseId: dto.horseId,
+                    },
+                });
+            }
+
             return { success: true };
         });
     }
+
 
     // 4. View Derby History for a horse
     async getDerbyHistoryForHorse(horseId: string) {
@@ -707,9 +761,37 @@ export class DerbyService {
     }
 
     async listAllDerbies() {
-        return this.prisma.pvpRace.findMany({
+        const races = await this.prisma.pvpRace.findMany({
             orderBy: { startsAt: 'asc' },
+            include: {
+                entries: {
+                    where: { isActive: true },
+                    select: { id: true },
+                },
+            },
         });
+
+        return races.map((r) => ({
+            id: r.id,
+            name: r.name,
+            description: r.description,
+            status: r.status,
+            registrationOpensAt: r.registrationOpensAt,
+            startsAt: r.startsAt,
+            maxMmr: r.maxMmr,
+            maxParticipants: r.maxParticipants,
+            wronEntryFee: r.wronEntryFee,
+            phorseEntryFee: r.phorseEntryFee,
+            wronPayoutPercent: r.wronPayoutPercent,
+            pctFirst: r.pctFirst,
+            pctSecond: r.pctSecond,
+            pctThird: r.pctThird,
+            allowedRarities: r.allowedRarities,
+            totalEntries: r.entries.length,
+            totalBetWron: r.totalBetWron,
+            bettingPoolWron: r.bettingPoolWron,
+            createdAt: r.createdAt,
+        }));
     }
 
     async getDerbyById(id: string) {

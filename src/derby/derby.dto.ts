@@ -32,10 +32,10 @@ export class CreateDerbyDto {
   @Min(0)
   phorseEntryFee: number;
 
-  // 0..1 portion of total WRON pot that goes to winners
+  // 0..100 portion of total WRON pot that goes to winners
   @IsNumber()
   @Min(0)
-  @Max(1)
+  @Max(100)
   wronPayoutPercent: number;
 
   @IsArray()
