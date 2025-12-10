@@ -69,11 +69,13 @@ export class DerbyController {
    *  - Get a single derby with its active entries
    */
   @Get(':id')
-  async getDerby(@Param('id') id: string) {
+  async getDerby(@Param('id') id: string, @Request() req: any) {
     if (!id) {
       throw new BadRequestException('Derby id is required');
     }
-    return this.derbyService.getDerbyById(id);
+
+    const wallet: string | undefined = req.user?.wallet;
+    return this.derbyService.getDerbyById(id, wallet);
   }
 
   /**

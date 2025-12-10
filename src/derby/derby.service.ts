@@ -794,7 +794,7 @@ export class DerbyService {
         }));
     }
 
-    async getDerbyById(id: string) {
+    async getDerbyById(id: string, userWallet?: string) {
         const race = await this.prisma.pvpRace.findUnique({
             where: { id },
             include: {
@@ -827,7 +827,30 @@ export class DerbyService {
             },
         });
 
-        return { ...race, history };
+        let myBetPrize = 0;
+
+        if (userWallet) {
+            const user = await this.prisma.user.findUnique({
+                where: { wallet: userWallet },
+                select: { id: true },
+            });
+
+            if (user) {
+                const betPrizeTxs = await this.prisma.transaction.findMany({
+                    where: {
+                        ownerId: user.id,
+                        note: {
+                            startsWith: `DERBY_BET_PRIZE:${id}:`,
+                        },
+                    },
+                    select: { value: true },
+                });
+
+                myBetPrize = betPrizeTxs.reduce((sum, tx) => sum + tx.value, 0);
+            }
+        }
+
+        return { ...race, history, myBetPrize };
     }
 
 
