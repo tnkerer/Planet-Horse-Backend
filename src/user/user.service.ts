@@ -250,7 +250,7 @@ export class UserService {
         const ownedA = p1.ownedSince ? now - p1.ownedSince.getTime() : 0;
         const ownedB = p2.ownedSince ? now - p2.ownedSince.getTime() : 0;
         if (ownedA < minOwnedMs || ownedB < minOwnedMs) {
-        // throw new BadRequestException('You must own both parents for at least 72 hours');
+            // throw new BadRequestException('You must own both parents for at least 72 hours');
         }
 
         // Level rule
@@ -324,6 +324,7 @@ export class UserService {
             }
             return weights.length - 1;
         };
+
         const rarityMap = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'] as const;
         const childTier = rarityMap[pickWeightedIndex(chances)];
 
@@ -341,6 +342,8 @@ export class UserService {
         if (p1.name === "Phoenix's Guardian" || p2.name === "Phoenix's Guardian") {
             if (!mythicPool.includes("Phoenix's Guardian")) {
                 mythicPool.push("Phoenix's Guardian");
+                mythicPool.push("Phoenix's Guardian");
+                mythicPool.push("Phoenix's Guardian");
             }
         }
 
@@ -348,18 +351,55 @@ export class UserService {
         if (p1.name === "Akhal-Teke" || p2.name === "Akhal-Teke") {
             if (!rarePool.includes("Akhal-Teke")) {
                 rarePool.push("Akhal-Teke");
+                rarePool.push("Akhal-Teke");
+                rarePool.push("Akhal-Teke");
+                rarePool.push("Akhal-Teke");
+                rarePool.push("Akhal-Teke");
+                rarePool.push("Akhal-Teke");
             }
         }
 
-        // Build a pool map with the (possibly) augmented Mythic list
+        // --- New special cases: Legendary pool boosts ---
+        const legendaryPool = [...NAME_POOL.Legendary];
+
+        if (p1.name === 'Caronte' || p2.name === 'Caronte') {
+            if (!legendaryPool.includes('Caronte')) {
+                legendaryPool.push('Caronte');
+                legendaryPool.push('Caronte');
+                legendaryPool.push('Caronte');
+                legendaryPool.push('Caronte');
+            }
+        }
+
+        if (p1.name === 'Royal Chivalry' || p2.name === 'Royal Chivalry') {
+            if (!legendaryPool.includes('Royal Chivalry')) {
+                legendaryPool.push('Royal Chivalry');
+                legendaryPool.push('Royal Chivalry');
+                legendaryPool.push('Royal Chivalry');
+                legendaryPool.push('Royal Chivalry');
+            }
+        }
+
+        if (p1.name === 'Onyx Memory' || p2.name === 'Onyx Memory') {
+            if (!legendaryPool.includes('Onyx Memory')) {
+                legendaryPool.push('Onyx Memory');
+                legendaryPool.push('Onyx Memory');
+                legendaryPool.push('Onyx Memory');
+                legendaryPool.push('Onyx Memory');
+            }
+        }
+
+        // Build a pool map with the (possibly) augmented lists
         const EFFECTIVE_POOL: typeof NAME_POOL = {
             ...NAME_POOL,
             Rare: rarePool as typeof NAME_POOL.Rare,
+            Legendary: legendaryPool as typeof NAME_POOL.Legendary,
             Mythic: mythicPool as typeof NAME_POOL.Mythic,
         };
 
         const chosenPool = EFFECTIVE_POOL[childTier];
         const childName = chosenPool[Math.floor(Math.random() * chosenPool.length)];
+
 
         // Highest stat picks
         const maleStats = [
@@ -669,7 +709,7 @@ export class UserService {
             const ownedA = p1.ownedSince ? now - p1.ownedSince.getTime() : 0;
             const ownedB = p2.ownedSince ? now - p2.ownedSince.getTime() : 0;
             if (ownedA < minOwnedMs || ownedB < minOwnedMs) {
-               // reasons.push('You must own both parents for at least 72 hours');
+                // reasons.push('You must own both parents for at least 72 hours');
             }
 
             // Level must be currentBreeds + 1 (per parent)
