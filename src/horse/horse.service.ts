@@ -136,10 +136,10 @@ function rollRewards(
   const t = (pos - 1) / 9; // 0 at P1, 1 at P10
   const lerp = (hi: number, lo: number, u: number) => hi + (lo - hi) * u;
 
-  const wronProbBase = lerp(0.03, 0.002, t);   // P1≈3% → P10≈0.2%
+  const wronProbBase = lerp(0.06, 0.008, t);   // P1≈6% → P10≈0.8%
   const wronMin = 0.1;
-  const wronMax = 4;
-  const wronJackpotProb = lerp(0.002, 0.0003, t); // P1≈0.2% → P10≈0.03%
+  const wronMax = 20;
+  const wronJackpotProb = lerp(0.008, 0.001, t); // P1≈0.8% → P10≈0.01%
 
   const hasWronLiquidity = (opts?.wronAvailable ?? 0) > 0;
   const shouldTryWRON = hasWronLiquidity && (Math.random() < wronProbBase);
