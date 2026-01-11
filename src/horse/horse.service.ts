@@ -136,10 +136,10 @@ function rollRewards(
   const t = (pos - 1) / 9; // 0 at P1, 1 at P10
   const lerp = (hi: number, lo: number, u: number) => hi + (lo - hi) * u;
 
-  const wronProbBase = lerp(0.03, 0.002, t);   // P1≈3% → P10≈0.2%
+  const wronProbBase = lerp(0.06, 0.004, t);   // P1≈3% → P10≈0.2%
   const wronMin = 0.1;
   const wronMax = 8;
-  const wronJackpotProb = lerp(0.002, 0.0003, t); // P1≈0.2% → P10≈0.03%
+  const wronJackpotProb = lerp(0.004, 0.0006, t); // P1≈0.2% → P10≈0.03%
 
   const hasWronLiquidity = (opts?.wronAvailable ?? 0) > 0;
   const shouldTryWRON = hasWronLiquidity && (Math.random() < wronProbBase);
@@ -150,7 +150,7 @@ function rollRewards(
   let phorseMax = baseMax;
 
   // Baseline very-hard jackpot odds still scale with position
-  let phorseJackpotProb = lerp(0.004, 0.0005, t); // 0.4% → 0.05%
+  let phorseJackpotProb = lerp(0.008, 0.001, t); // 0.4% → 0.05%
 
   // ── Level widens PHORSE range (min & max) ───────────────────────────────────
   const level = Math.max(1, opts?.level ?? 1);
