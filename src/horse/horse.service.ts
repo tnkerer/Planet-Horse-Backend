@@ -1892,7 +1892,7 @@ export class HorseService {
 
       // (4) Check unequip cooldown for non-breakable items (trophies)
       if (!equipment.breakable) {
-        const HOURS_MS = 24 * 60 * 60 * 1000;
+        const HOURS_MS = 1 * 60 * 60 * 1000;
         const now = Date.now();
         const lastUpdate = equipment.updatedAt?.getTime() ?? 0;
         if (now - lastUpdate < HOURS_MS) {
