@@ -23,7 +23,7 @@ import { DerbyModule } from './derby/derby.module'
     ThrottlerModule.forRoot({
       throttlers: [
         {
-          ttl:   30_000,  // time-to-live in milliseconds
+          ttl: 30_000,  // time-to-live in milliseconds
           limit: 30000,     // max 100 requests per ttl
         },
       ],
@@ -40,9 +40,9 @@ import { DerbyModule } from './derby/derby.module'
   ],
   controllers: [AppController],
   providers: [
-    AppService, 
+    AppService,
     // ReferralXpCronService
-    ],
+  ],
 })
 
 export class AppModule implements NestModule {
@@ -64,35 +64,35 @@ export class AppModule implements NestModule {
         })
       )
       .exclude(
-        // skip CSRF for your SIWE endpoints
-        { path: 'auth/nonce', method: RequestMethod.GET },
-        { path: 'auth/verify', method: RequestMethod.POST },
-        { path: 'auth/discord-token', method: RequestMethod.POST },
-        { path: 'auth/logout', method: RequestMethod.POST },
-        { path: 'user/chests/buy', method: RequestMethod.POST },
-        { path: 'user/chests/open', method: RequestMethod.POST },
-        { path: 'user/items/recycle', method: RequestMethod.POST },
-        { path: 'user/items/break', method: RequestMethod.POST },
-        { path: 'user/items/upgrade', method: RequestMethod.POST },
-        { path: 'user/items/open-bag', method: RequestMethod.POST },
-        { path: 'user/items/craft', method: RequestMethod.POST },
-        { path: 'user/withdraw', method: RequestMethod.POST },
-        { path: 'user/withdraw/wron', method: RequestMethod.POST },
-        { path: 'user/item-withdraw', method: RequestMethod.POST },
-        { path: 'user/link-discord', method: RequestMethod.POST },
-        { path: 'user/ref-code', method: RequestMethod.POST },
-        { path: 'user/breed', method: RequestMethod.POST },
-        { path: 'user/finalize-breed', method: RequestMethod.POST },
-        { path: 'user/set-referred-by', method: RequestMethod.POST},
-        { path: 'horses/*', method: RequestMethod.PUT },
-        { path: 'simulate', method: RequestMethod.POST },
-        { path: 'stable/*', method: RequestMethod.POST },
-        { path: 'derby/*', method: RequestMethod.POST},
-        { path: 'quest/claim', method: RequestMethod.POST },
-        { path: 'quest/checkin', method: RequestMethod.POST },
-        { path: 'quest/create', method: RequestMethod.POST },
-        { path: 'quest/admin/sync', method: RequestMethod.POST }
-      )
+      // skip CSRF for your SIWE endpoints
+      /* { path: 'auth/nonce', method: RequestMethod.GET },
+      { path: 'auth/verify', method: RequestMethod.POST },
+      { path: 'auth/discord-token', method: RequestMethod.POST },
+      { path: 'auth/logout', method: RequestMethod.POST },
+      { path: 'user/chests/buy', method: RequestMethod.POST },
+      { path: 'user/chests/open', method: RequestMethod.POST },
+      { path: 'user/items/recycle', method: RequestMethod.POST },
+      { path: 'user/items/break', method: RequestMethod.POST },
+      { path: 'user/items/upgrade', method: RequestMethod.POST },
+      { path: 'user/items/open-bag', method: RequestMethod.POST },
+      { path: 'user/items/craft', method: RequestMethod.POST },
+      { path: 'user/withdraw', method: RequestMethod.POST },
+      { path: 'user/withdraw/wron', method: RequestMethod.POST },
+      { path: 'user/item-withdraw', method: RequestMethod.POST },
+      { path: 'user/link-discord', method: RequestMethod.POST },
+      { path: 'user/ref-code', method: RequestMethod.POST },
+      { path: 'user/breed', method: RequestMethod.POST },
+      { path: 'user/finalize-breed', method: RequestMethod.POST },
+      { path: 'user/set-referred-by', method: RequestMethod.POST},
+      { path: 'horses/*', method: RequestMethod.PUT },
+      { path: 'simulate', method: RequestMethod.POST },
+      { path: 'stable/*', method: RequestMethod.POST },
+      { path: 'derby/*', method: RequestMethod.POST},
+      { path: 'quest/claim', method: RequestMethod.POST },
+      { path: 'quest/checkin', method: RequestMethod.POST },
+      { path: 'quest/create', method: RequestMethod.POST },
+      { path: 'quest/admin/sync', method: RequestMethod.POST } */
+    )
       .forRoutes('*')
   }
 }
